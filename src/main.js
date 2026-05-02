@@ -30,6 +30,8 @@ const minimumTraceDurationMs = 1700;
 const maximumTraceDurationMs = 4600;
 const finalOverviewDelayMs = 1400;
 const finalClusterRadiusCells = 14;
+const exportTitleDurationMs = Number(urlParams.get("titleMs") || 2800);
+const exportEndCardDelayMs = Number(urlParams.get("endCardDelayMs") || 1400);
 
 const state = {
   allRoutes: [],
@@ -76,7 +78,17 @@ const elements = {
   currentDate: document.querySelector("#current-date"),
   emptyState: document.querySelector("#empty-state"),
   exportCurrentDate: document.querySelector("#export-current-date"),
+  exportEndActivities: document.querySelector("#export-end-activities"),
+  exportEndCard: document.querySelector("#export-end-card"),
+  exportEndDistance: document.querySelector("#export-end-distance"),
+  exportEndSplit: document.querySelector("#export-end-split"),
+  exportEndSquares: document.querySelector("#export-end-squares"),
+  exportEndTitle: document.querySelector("#export-end-title"),
+  exportKicker: document.querySelector("#export-kicker"),
   exportRouteCount: document.querySelector("#export-route-count"),
+  exportSubtitle: document.querySelector("#export-subtitle"),
+  exportTitle: document.querySelector("#export-title"),
+  exportTitleCard: document.querySelector("#export-title-card"),
   exportTotalDistance: document.querySelector("#export-total-distance"),
   playButton: document.querySelector("#play-button"),
   resetButton: document.querySelector("#reset-button"),
@@ -155,6 +167,10 @@ function applyExportDefaults() {
   if (!isExportMode) return;
 
   elements.speed.value = urlParams.get("speed") || "5200";
+  elements.exportTitle.textContent = urlParams.get("title") || "A year of running & cycling";
+  elements.exportSubtitle.textContent =
+    urlParams.get("subtitle") || "Every square unlocked, one activity at a time.";
+  elements.exportKicker.textContent = urlParams.get("kicker") || "Route Progress";
 }
 
 function applyFilter() {
@@ -190,6 +206,7 @@ function exposeAppControls() {
     state() {
       return {
         index: state.index,
+        isEnded: document.body.classList.contains("export-ended"),
         isComplete: state.index >= state.filteredRoutes.length - 1,
         isPlaying: state.isPlaying,
         routeCount: state.filteredRoutes.length
@@ -204,6 +221,7 @@ function play() {
   if (state.filteredRoutes.length === 0) return;
 
   state.isPlaying = true;
+  document.body.classList.remove("export-ended");
   elements.playButton.textContent = "Pause";
 
   if (state.index >= state.filteredRoutes.length - 1) {
@@ -212,7 +230,13 @@ function play() {
     fitAllRoutes();
   }
 
-  tick();
+  if (isExportMode && state.index === -1 && !document.body.classList.contains("export-started")) {
+    document.body.classList.add("export-started");
+    state.timer = window.setTimeout(tick, exportTitleDurationMs);
+  } else {
+    document.body.classList.add("export-started");
+    tick();
+  }
 }
 
 function clampTimelineIndex(index) {
@@ -227,7 +251,12 @@ function tick() {
       if (!state.isPlaying) return;
 
       showFinalOverview();
-      pause();
+      state.timer = window.setTimeout(() => {
+        if (!state.isPlaying) return;
+
+        showExportEndCard();
+        pause();
+      }, exportEndCardDelayMs);
     }, finalOverviewDelayMs);
     return;
   }
@@ -259,6 +288,13 @@ function pause() {
   state.isPlaying = false;
   elements.playButton.textContent = "Play";
   window.clearTimeout(state.timer);
+}
+
+function showExportEndCard() {
+  if (!isExportMode) return;
+
+  updateExportEndCard();
+  document.body.classList.add("export-ended");
 }
 
 function revealLeadMs() {
@@ -309,8 +345,24 @@ function render() {
   elements.exportRouteCount.textContent = String(completedCells.size);
   elements.exportTotalDistance.textContent = `${visibleDistance.toFixed(1)} km`;
   elements.exportCurrentDate.textContent = latestRoute ? formatDate(latestRoute.date) : "—";
+  updateExportEndCard();
   elements.timeline.value = String(state.index);
   renderRouteList(visibleRoutes, latestRoute);
+}
+
+function updateExportEndCard() {
+  const visibleRoutes = state.filteredRoutes.slice(0, Math.max(state.index + 1, 0));
+  const routeSource = visibleRoutes.length > 0 ? visibleRoutes : state.filteredRoutes;
+  const completedCells = visibleRoutes.length > 0 ? state.completedCells : allCellMap(state.filteredRoutes);
+  const distance = routeSource.reduce((sum, route) => sum + route.distanceKm, 0);
+  const runs = routeSource.filter((route) => route.type === "run").length;
+  const rides = routeSource.filter((route) => route.type === "ride").length;
+
+  elements.exportEndTitle.textContent = urlParams.get("endTitle") || "Progress unlocked";
+  elements.exportEndActivities.textContent = String(routeSource.length);
+  elements.exportEndDistance.textContent = `${distance.toFixed(1)} km`;
+  elements.exportEndSquares.textContent = String(completedCells.size);
+  elements.exportEndSplit.textContent = `${runs} / ${rides}`;
 }
 
 function focusPlaybackView(targetIndex = state.index) {

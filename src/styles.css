@@ -261,6 +261,10 @@ button:hover {
   display: none;
 }
 
+.export-card {
+  display: none;
+}
+
 .export-mode {
   width: 1080px;
   height: 1920px;
@@ -293,6 +297,123 @@ button:hover {
   display: none;
 }
 
+.export-mode .export-card {
+  position: absolute;
+  inset: 0;
+  z-index: 760;
+  display: grid;
+  place-content: center;
+  padding: 86px;
+  color: #e5edf8;
+  text-align: center;
+  background:
+    radial-gradient(circle at 50% 38%, rgba(56, 189, 248, 0.3), transparent 28%),
+    linear-gradient(180deg, rgba(8, 17, 31, 0.9), rgba(8, 17, 31, 0.7));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 550ms ease;
+}
+
+.export-mode:not(.export-started) .export-title-card,
+.export-mode.export-ended .export-end-card {
+  opacity: 1;
+}
+
+.export-card p {
+  margin: 0;
+  color: #93c5fd;
+  font-size: 1.6rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.export-card h2 {
+  max-width: 860px;
+  margin: 1rem auto;
+  font-size: 5.7rem;
+  line-height: 0.95;
+  text-wrap: balance;
+}
+
+.export-title-card > p:nth-of-type(2) {
+  max-width: 720px;
+  margin: 0 auto;
+  color: #cbd5e1;
+  font-size: 1.75rem;
+  letter-spacing: 0;
+  line-height: 1.35;
+  text-transform: none;
+}
+
+.export-legend {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 2.2rem;
+  color: #dbeafe;
+  font-size: 1.25rem;
+  font-weight: 900;
+}
+
+.export-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.6rem 0.9rem;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(226, 232, 240, 0.18);
+  border-radius: 999px;
+}
+
+.export-legend i {
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 0.25rem;
+}
+
+.legend-run {
+  background: #22c55e;
+}
+
+.legend-ride {
+  background: #38bdf8;
+}
+
+.legend-mixed {
+  background: #a855f7;
+}
+
+.export-end-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  width: 820px;
+  margin-top: 1.4rem;
+}
+
+.export-end-grid div {
+  display: grid;
+  gap: 0.45rem;
+  padding: 1.3rem;
+  background: rgba(15, 23, 42, 0.74);
+  border: 1px solid rgba(226, 232, 240, 0.2);
+  border-radius: 1.4rem;
+}
+
+.export-end-grid span {
+  color: #94a3b8;
+  font-size: 1rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.export-end-grid strong {
+  font-size: 3.1rem;
+  line-height: 1;
+}
+
 .export-mode .export-stats {
   position: absolute;
   left: 50%;
@@ -302,7 +423,7 @@ button:hover {
   grid-template-columns: repeat(3, 1fr);
   gap: 0.8rem;
   width: calc(100% - 96px);
-  padding: 1.1rem;
+  padding: 1.25rem;
   color: #e5edf8;
   background: rgba(8, 17, 31, 0.86);
   border: 1px solid rgba(226, 232, 240, 0.22);
@@ -312,9 +433,17 @@ button:hover {
   backdrop-filter: blur(16px);
 }
 
+.export-mode:not(.export-started) .export-stats,
+.export-mode.export-ended .export-stats {
+  opacity: 0;
+}
+
 .export-stats div {
   display: grid;
   gap: 0.2rem;
+  padding: 0.35rem 0.45rem;
+  border-radius: 0.9rem;
+  background: rgba(15, 23, 42, 0.56);
 }
 
 .export-stats span {

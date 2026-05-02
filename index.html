@@ -71,6 +71,38 @@
 
       <section class="map-panel" aria-label="Map">
         <div id="map"></div>
+        <section id="export-title-card" class="export-card export-title-card" aria-label="Export title card">
+          <p id="export-kicker">Route Progress</p>
+          <h2 id="export-title">A year of running & cycling</h2>
+          <p id="export-subtitle">Every square unlocked, one activity at a time.</p>
+          <div class="export-legend" aria-label="Map legend">
+            <span><i class="legend-run"></i> Runs</span>
+            <span><i class="legend-ride"></i> Rides</span>
+            <span><i class="legend-mixed"></i> Both</span>
+          </div>
+        </section>
+        <section id="export-end-card" class="export-card export-end-card" aria-label="Export ending card" hidden>
+          <p>Final Stats</p>
+          <h2 id="export-end-title">Progress unlocked</h2>
+          <div class="export-end-grid">
+            <div>
+              <span>Activities</span>
+              <strong id="export-end-activities">0</strong>
+            </div>
+            <div>
+              <span>Distance</span>
+              <strong id="export-end-distance">0 km</strong>
+            </div>
+            <div>
+              <span>Squares</span>
+              <strong id="export-end-squares">0</strong>
+            </div>
+            <div>
+              <span>Run / Ride</span>
+              <strong id="export-end-split">0 / 0</strong>
+            </div>
+          </div>
+        </section>
         <aside class="export-stats" aria-label="Export video statistics">
           <div>
             <span>Squares</span>

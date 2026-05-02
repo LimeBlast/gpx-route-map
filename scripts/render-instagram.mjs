@@ -18,6 +18,16 @@ const progressIntervalMs = Number(process.env.PROGRESS_INTERVAL_MS || 2000);
 const exportSpeed = Number(process.env.EXPORT_SPEED || 5200);
 const maxRenderMinutes = Number(process.env.MAX_RENDER_MINUTES || 60);
 const cdpCommandTimeoutMs = Number(process.env.CDP_COMMAND_TIMEOUT_MS || 20_000);
+const exportParams = new URLSearchParams({
+  export: "1",
+  speed: String(exportSpeed),
+  title: process.env.VIDEO_TITLE || "A year of running & cycling",
+  subtitle: process.env.VIDEO_SUBTITLE || "Every square unlocked, one activity at a time.",
+  kicker: process.env.VIDEO_KICKER || "Route Progress",
+  endTitle: process.env.VIDEO_END_TITLE || "Progress unlocked",
+  titleMs: process.env.TITLE_MS || "2800",
+  endCardDelayMs: process.env.END_CARD_DELAY_MS || "1400"
+});
 const chromeDebugPort = Number(process.env.CHROME_DEBUG_PORT || 9223);
 const chromePath =
   process.env.CHROME_PATH ||
@@ -55,7 +65,7 @@ try {
     screenHeight: height
   });
 
-  await client.send("Page.navigate", { url: `${server.url}/?export=1&speed=${exportSpeed}` });
+  await client.send("Page.navigate", { url: `${server.url}/?${exportParams}` });
   await client.waitFor("Page.loadEventFired");
   await evaluate(client, "new Promise((resolve) => window.routeProgressApp ? resolve() : window.addEventListener('route-progress-ready', resolve, { once: true }))");
   await evaluate(client, "window.routeProgressApp.reset()");
