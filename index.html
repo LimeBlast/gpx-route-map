@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Route Progress Map</title>
+  </head>
+  <body>
+    <main id="app">
+      <section class="sidebar">
+        <p class="eyebrow">Activity Progress</p>
+        <h1>Running & Cycling Map</h1>
+        <p class="intro">
+          Drop GPX or FIT files into <code>gpx/</code>, build the route index, and
+          watch map squares fill in as your activities unlock them chronologically.
+        </p>
+
+        <div class="stats" aria-label="Route statistics">
+          <div>
+            <strong id="route-count">0</strong>
+            <span>squares filled</span>
+          </div>
+          <div>
+            <strong id="total-distance">0 km</strong>
+            <span>visible distance</span>
+          </div>
+          <div>
+            <strong id="current-date">—</strong>
+            <span>current date</span>
+          </div>
+        </div>
+
+        <div class="controls" aria-label="Timeline controls">
+          <label>
+            Activity
+            <select id="activity-filter">
+              <option value="all">All</option>
+              <option value="run">Runs</option>
+              <option value="ride">Rides</option>
+            </select>
+          </label>
+
+          <label>
+            Timeline
+            <input id="timeline" type="range" min="-1" max="0" value="-1" />
+          </label>
+
+          <label>
+            Speed
+            <input id="speed" type="range" min="500" max="4000" step="50" value="1800" />
+          </label>
+
+          <label class="checkbox-control">
+            <input id="cinematic-pan" type="checkbox" checked />
+            Cinematic pan while playing
+          </label>
+
+          <label class="checkbox-control">
+            <input id="show-route-trace" type="checkbox" checked />
+            Show current route trace
+          </label>
+
+          <div class="buttons">
+            <button id="play-button" type="button">Play</button>
+            <button id="reset-button" type="button">Reset</button>
+          </div>
+        </div>
+
+        <ol id="route-list" class="route-list" aria-label="Visible routes"></ol>
+      </section>
+
+      <section class="map-panel" aria-label="Map">
+        <div id="map"></div>
+        <aside class="export-stats" aria-label="Export video statistics">
+          <div>
+            <span>Squares</span>
+            <strong id="export-route-count">0</strong>
+          </div>
+          <div>
+            <span>Distance</span>
+            <strong id="export-total-distance">0 km</strong>
+          </div>
+          <div>
+            <span>Date</span>
+            <strong id="export-current-date">—</strong>
+          </div>
+        </aside>
+        <div id="empty-state" class="empty-state" hidden>
+          <h2>No routes yet</h2>
+          <p>Add GPX or FIT files to <code>gpx/</code>, then run <code>npm run build:routes</code>.</p>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

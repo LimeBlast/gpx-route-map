@@ -1,0 +1,805 @@
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import "./styles.css";
+
+const urlParams = new URLSearchParams(window.location.search);
+const isExportMode = urlParams.has("export");
+
+if (isExportMode) {
+  document.body.classList.add("export-mode");
+}
+
+const colors = {
+  run: "#22c55e",
+  ride: "#38bdf8",
+  other: "#f97316",
+  mixed: "#a855f7"
+};
+
+const traceColors = {
+  run: "#14532d",
+  ride: "#075985",
+  other: "#7c2d12"
+};
+
+const gridCellMeters = 1000;
+const minimumRevealDelayMs = 350;
+const minimumCameraLeadMs = 2200;
+const maximumCameraLeadMs = 5200;
+const minimumTraceDurationMs = 1700;
+const maximumTraceDurationMs = 4600;
+const finalOverviewDelayMs = 1400;
+const finalClusterRadiusCells = 14;
+
+const state = {
+  allRoutes: [],
+  filteredRoutes: [],
+  gridCells: new Map(),
+  cellLayers: new Map(),
+  completedCells: new Map(),
+  gridRefreshFrame: null,
+  cameraTargetKey: "",
+  index: -1,
+  isPlaying: false,
+  routeAnimationFrame: null,
+  routeAnimationToken: 0,
+  timer: null,
+  routeLayers: []
+};
+
+const map = L.map("map", {
+  zoomControl: false,
+  scrollWheelZoom: true
+}).setView([54.5, -3], 6);
+
+L.control.zoom({ position: "bottomright" }).addTo(map);
+
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19,
+  className: "greyscale-tiles",
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+}).addTo(map);
+
+map.createPane("gridPane");
+map.getPane("gridPane").style.zIndex = 410;
+map.getPane("gridPane").style.pointerEvents = "none";
+
+const gridRenderer = isExportMode
+  ? L.canvas({ pane: "gridPane", padding: 1 })
+  : L.svg({ pane: "gridPane", padding: 1 });
+const gridLayerGroup = L.layerGroup().addTo(map);
+const routeLayerGroup = L.layerGroup().addTo(map);
+
+const elements = {
+  activityFilter: document.querySelector("#activity-filter"),
+  cinematicPan: document.querySelector("#cinematic-pan"),
+  currentDate: document.querySelector("#current-date"),
+  emptyState: document.querySelector("#empty-state"),
+  exportCurrentDate: document.querySelector("#export-current-date"),
+  exportRouteCount: document.querySelector("#export-route-count"),
+  exportTotalDistance: document.querySelector("#export-total-distance"),
+  playButton: document.querySelector("#play-button"),
+  resetButton: document.querySelector("#reset-button"),
+  routeCount: document.querySelector("#route-count"),
+  routeList: document.querySelector("#route-list"),
+  showRouteTrace: document.querySelector("#show-route-trace"),
+  speed: document.querySelector("#speed"),
+  timeline: document.querySelector("#timeline"),
+  totalDistance: document.querySelector("#total-distance")
+};
+
+async function boot() {
+  try {
+    const response = await fetch("/routes.json");
+
+    if (!response.ok) {
+      throw new Error(`Could not load routes.json: ${response.status}`);
+    }
+
+    const data = await response.json();
+    state.allRoutes = Array.isArray(data.routes) ? data.routes : [];
+    state.allRoutes.sort((left, right) => new Date(left.date) - new Date(right.date));
+    state.allRoutes.forEach((route) => {
+      route.segments = normalizedRouteSegments(route);
+      route.cells = routeCellKeys(route);
+    });
+
+    await waitForMapLayout();
+    bindControls();
+    applyExportDefaults();
+    applyFilter();
+    exposeAppControls();
+  } catch (error) {
+    console.error(error);
+    elements.emptyState.hidden = false;
+  }
+}
+
+function bindControls() {
+  window.addEventListener("resize", () => {
+    map.invalidateSize();
+    refreshGridStyles();
+  });
+
+  map.on("movestart move zoomstart zoom zoomend moveend", refreshGridStyles);
+  map.on("zoomend moveend", () => {
+    window.setTimeout(refreshGridStyles, 60);
+  });
+
+  elements.activityFilter.addEventListener("change", () => {
+    pause();
+    applyFilter();
+  });
+
+  elements.timeline.addEventListener("input", () => {
+    pause();
+    state.index = Number(elements.timeline.value);
+    render();
+  });
+
+  elements.playButton.addEventListener("click", () => {
+    state.isPlaying ? pause() : play();
+  });
+
+  elements.resetButton.addEventListener("click", () => {
+    pause();
+    state.index = -1;
+    render();
+    fitAllRoutes();
+  });
+
+  elements.showRouteTrace.addEventListener("change", render);
+}
+
+function applyExportDefaults() {
+  if (!isExportMode) return;
+
+  elements.speed.value = urlParams.get("speed") || "5200";
+}
+
+function applyFilter() {
+  const activity = elements.activityFilter.value;
+
+  state.filteredRoutes = activity === "all"
+    ? state.allRoutes
+    : state.allRoutes.filter((route) => route.type === activity);
+
+  state.index = clampTimelineIndex(state.index);
+  state.cameraTargetKey = "";
+  elements.timeline.min = "-1";
+  elements.timeline.max = Math.max(state.filteredRoutes.length - 1, 0);
+  elements.timeline.disabled = state.filteredRoutes.length === 0;
+  elements.emptyState.hidden = state.filteredRoutes.length > 0;
+
+  buildGrid();
+  render();
+  fitAllRoutes();
+}
+
+function exposeAppControls() {
+  window.routeProgressApp = {
+    play,
+    pause,
+    reset() {
+      pause();
+      state.index = -1;
+      state.cameraTargetKey = "";
+      render();
+      fitAllRoutes();
+    },
+    state() {
+      return {
+        index: state.index,
+        isComplete: state.index >= state.filteredRoutes.length - 1,
+        isPlaying: state.isPlaying,
+        routeCount: state.filteredRoutes.length
+      };
+    }
+  };
+
+  window.dispatchEvent(new CustomEvent("route-progress-ready"));
+}
+
+function play() {
+  if (state.filteredRoutes.length === 0) return;
+
+  state.isPlaying = true;
+  elements.playButton.textContent = "Pause";
+
+  if (state.index >= state.filteredRoutes.length - 1) {
+    state.index = -1;
+    render();
+    fitAllRoutes();
+  }
+
+  tick();
+}
+
+function clampTimelineIndex(index) {
+  return Math.min(Math.max(index, -1), Math.max(state.filteredRoutes.length - 1, -1));
+}
+
+function tick() {
+  if (!state.isPlaying) return;
+
+  if (state.index >= state.filteredRoutes.length - 1) {
+    state.timer = window.setTimeout(() => {
+      if (!state.isPlaying) return;
+
+      showFinalOverview();
+      pause();
+    }, finalOverviewDelayMs);
+    return;
+  }
+
+  const nextIndex = state.index + 1;
+  const cameraMoved = focusPlaybackView(nextIndex);
+  const cameraLeadMs = cameraMoved ? revealLeadMs() : 0;
+  const followUpDelayMs = postRevealDelayMs();
+
+  state.timer = window.setTimeout(() => {
+    if (!state.isPlaying) return;
+
+    state.index = nextIndex;
+    render();
+
+    state.timer = window.setTimeout(tick, followUpDelayMs);
+  }, cameraLeadMs);
+}
+
+function showFinalOverview() {
+  const bounds = densestClusterBounds();
+
+  if (bounds.isValid()) {
+    moveToBounds(bounds, { key: "final-overview", maxZoom: 12, force: true, padding: [96, 96] });
+  }
+}
+
+function pause() {
+  state.isPlaying = false;
+  elements.playButton.textContent = "Play";
+  window.clearTimeout(state.timer);
+}
+
+function revealLeadMs() {
+  if (!elements.cinematicPan.checked) return 0;
+
+  return Math.min(
+    Math.max(Math.round(Number(elements.speed.value) * 0.78), minimumCameraLeadMs),
+    maximumCameraLeadMs
+  );
+}
+
+function postRevealDelayMs() {
+  if (elements.showRouteTrace.checked) {
+    return traceDurationMs();
+  }
+
+  return Math.max(Number(elements.speed.value) * 0.45, minimumRevealDelayMs);
+}
+
+function waitForMapLayout() {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        map.invalidateSize();
+        resolve();
+      });
+    });
+  });
+}
+
+function render() {
+  clearRouteLayers();
+
+  const visibleRoutes = state.filteredRoutes.slice(0, state.index + 1);
+  const latestRoute = visibleRoutes.at(-1);
+  const visibleDistance = visibleRoutes.reduce((sum, route) => sum + route.distanceKm, 0);
+  const completedCells = completedCellMap(visibleRoutes);
+
+  state.completedCells = completedCells;
+  renderGrid(completedCells);
+  if (latestRoute && elements.showRouteTrace.checked) {
+    renderAnimatedRouteTrace(latestRoute);
+  }
+
+  elements.routeCount.textContent = String(completedCells.size);
+  elements.totalDistance.textContent = `${visibleDistance.toFixed(1)} km`;
+  elements.currentDate.textContent = latestRoute ? formatDate(latestRoute.date) : "—";
+  elements.exportRouteCount.textContent = String(completedCells.size);
+  elements.exportTotalDistance.textContent = `${visibleDistance.toFixed(1)} km`;
+  elements.exportCurrentDate.textContent = latestRoute ? formatDate(latestRoute.date) : "—";
+  elements.timeline.value = String(state.index);
+  renderRouteList(visibleRoutes, latestRoute);
+}
+
+function focusPlaybackView(targetIndex = state.index) {
+  if (!elements.cinematicPan.checked || state.filteredRoutes.length === 0) return false;
+
+  const visibleRoutes = state.filteredRoutes.slice(0, targetIndex + 1);
+  const latestRoute = visibleRoutes.at(-1);
+
+  if (!latestRoute) return false;
+
+  const latestBounds = cellKeysBounds(latestRoute.cells);
+
+  if (!latestBounds.isValid()) return false;
+
+  return moveToBounds(latestBounds, { key: `route:${latestRoute.id}`, maxZoom: 14 });
+}
+
+function moveToBounds(bounds, options = {}) {
+  if (options.key && state.cameraTargetKey === options.key) return false;
+
+  state.cameraTargetKey = options.key || "";
+  map.stop();
+
+  const targetZoom = map.getBoundsZoom(bounds, false, [72, 72]);
+  const cappedTargetZoom = Math.min(targetZoom, options.maxZoom || 14);
+
+  if (!options.force && map.getBounds().pad(-0.15).contains(bounds) && map.getZoom() >= cappedTargetZoom) {
+    refreshGridStyles();
+    return false;
+  }
+
+  const padding = options.padding || [72, 72];
+
+  map.flyToBounds(bounds, {
+    animate: true,
+    duration: 1.05,
+    easeLinearity: 0.2,
+    maxZoom: options.maxZoom || 14,
+    paddingTopLeft: padding,
+    paddingBottomRight: padding
+  });
+
+  return true;
+}
+
+function renderRouteList(visibleRoutes, latestRoute) {
+  elements.routeList.replaceChildren(
+    ...visibleRoutes.slice(-8).reverse().map((route) => {
+      const item = document.createElement("li");
+      item.className = latestRoute?.id === route.id ? "active" : "";
+      item.innerHTML = `
+        <span class="route-type ${route.type}">${route.type}</span>
+        <span class="route-name">${escapeHtml(route.name)}</span>
+        <span class="route-meta">${formatDate(route.date)} · ${route.distanceKm.toFixed(1)} km</span>
+      `;
+      return item;
+    })
+  );
+}
+
+function clearRouteLayers() {
+  if (state.routeAnimationFrame) {
+    cancelAnimationFrame(state.routeAnimationFrame);
+  }
+
+  state.routeAnimationFrame = null;
+  state.routeAnimationToken += 1;
+  routeLayerGroup.clearLayers();
+  state.routeLayers = [];
+}
+
+function renderAnimatedRouteTrace(route) {
+  const color = traceColors[route.type] || traceColors.other;
+  const token = state.routeAnimationToken;
+  const totalDistance = route.segments.reduce((sum, segment) => sum + segmentDistanceMeters(segment), 0);
+  const durationMs = traceDurationMs();
+
+  if (totalDistance <= 0) return;
+
+  const draw = (startedAt, timestamp) => {
+    if (token !== state.routeAnimationToken) return;
+
+    const progress = Math.min((timestamp - startedAt) / durationMs, 1);
+    drawRouteProgress(route, color, totalDistance * progress);
+
+    if (progress < 1) {
+      state.routeAnimationFrame = requestAnimationFrame((nextTimestamp) => {
+        draw(startedAt, nextTimestamp);
+      });
+    }
+  };
+
+  state.routeAnimationFrame = requestAnimationFrame((timestamp) => {
+    draw(timestamp, timestamp);
+  });
+}
+
+function drawRouteProgress(route, color, targetDistanceMeters) {
+  routeLayerGroup.clearLayers();
+
+  let remainingDistance = targetDistanceMeters;
+  const visibleSegments = [];
+
+  for (const segment of route.segments) {
+    if (remainingDistance <= 0) break;
+
+    const segmentDistance = segmentDistanceMeters(segment);
+
+    if (remainingDistance >= segmentDistance) {
+      visibleSegments.push(segment);
+      remainingDistance -= segmentDistance;
+    } else {
+      const partialSegment = segmentSliceByDistance(segment, remainingDistance);
+
+      if (partialSegment.length > 1) {
+        visibleSegments.push(partialSegment);
+      }
+
+      remainingDistance = 0;
+    }
+  }
+
+  if (visibleSegments.length === 0) return;
+
+  const layer = L.polyline(visibleSegments, {
+    color,
+    opacity: 0.95,
+    weight: 4,
+    lineCap: "round",
+    lineJoin: "round"
+  }).addTo(routeLayerGroup);
+
+  layer.bindPopup(popupFor(route));
+  state.routeLayers = [layer];
+}
+
+function traceDurationMs() {
+  return Math.min(
+    Math.max(Math.round(Number(elements.speed.value) * 0.72), minimumTraceDurationMs),
+    maximumTraceDurationMs
+  );
+}
+
+function segmentDistanceMeters(segment) {
+  let distance = 0;
+
+  for (let index = 1; index < segment.length; index += 1) {
+    distance += latLngDistanceMeters(segment[index - 1], segment[index]);
+  }
+
+  return distance;
+}
+
+function segmentSliceByDistance(segment, targetDistanceMeters) {
+  const points = [segment[0]];
+  let travelled = 0;
+
+  for (let index = 1; index < segment.length; index += 1) {
+    const previousPoint = segment[index - 1];
+    const point = segment[index];
+    const distance = latLngDistanceMeters(previousPoint, point);
+
+    if (travelled + distance <= targetDistanceMeters) {
+      points.push(point);
+      travelled += distance;
+      continue;
+    }
+
+    const remaining = targetDistanceMeters - travelled;
+    const progress = distance > 0 ? remaining / distance : 0;
+
+    points.push([
+      previousPoint[0] + (point[0] - previousPoint[0]) * progress,
+      previousPoint[1] + (point[1] - previousPoint[1]) * progress
+    ]);
+    break;
+  }
+
+  return points;
+}
+
+function latLngDistanceMeters(left, right) {
+  return haversineMeters(
+    { latitude: left[0], longitude: left[1] },
+    { latitude: right[0], longitude: right[1] }
+  );
+}
+
+function fitAllRoutes() {
+  const bounds = cellKeysBounds(Array.from(state.gridCells.keys()));
+
+  if (bounds.isValid()) {
+    map.invalidateSize();
+    map.fitBounds(bounds, { padding: [40, 40] });
+  }
+}
+
+function routesBounds(routes) {
+  const bounds = L.latLngBounds([]);
+
+  routes.forEach((route) => bounds.extend(routeBounds(route)));
+
+  return bounds;
+}
+
+function routeBounds(route) {
+  const bounds = L.latLngBounds([]);
+
+  route.segments.forEach((segment) => {
+    segment.forEach((point) => {
+      bounds.extend(point);
+    });
+  });
+
+  return bounds;
+}
+
+function cellKeysBounds(cellKeys) {
+  const bounds = L.latLngBounds([]);
+
+  cellKeys.forEach((key) => {
+    const cell = state.gridCells.get(key) || parseCellKey(key);
+    bounds.extend(cellBounds(cell));
+  });
+
+  return bounds;
+}
+
+function densestClusterBounds() {
+  const cells = Array.from(state.completedCells.entries()).map(([key, cell]) => ({
+    key,
+    visitCount: cell.visitCount,
+    ...parseCellKey(key)
+  }));
+
+  if (cells.length === 0) {
+    return cellKeysBounds(Array.from(state.gridCells.keys()));
+  }
+
+  let bestCell = cells[0];
+  let bestScore = -Infinity;
+  const radiusSquared = finalClusterRadiusCells ** 2;
+
+  for (const candidate of cells) {
+    let score = 0;
+
+    for (const cell of cells) {
+      const distanceSquared = (cell.x - candidate.x) ** 2 + (cell.y - candidate.y) ** 2;
+
+      if (distanceSquared <= radiusSquared) {
+        score += cell.visitCount / Math.max(Math.sqrt(distanceSquared), 1);
+      }
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestCell = candidate;
+    }
+  }
+
+  const clusterKeys = cells
+    .filter((cell) => (cell.x - bestCell.x) ** 2 + (cell.y - bestCell.y) ** 2 <= radiusSquared)
+    .map((cell) => cell.key);
+
+  return cellKeysBounds(clusterKeys);
+}
+
+function buildGrid() {
+  gridLayerGroup.clearLayers();
+  state.gridCells = allCellMap(state.filteredRoutes);
+  state.cellLayers = new Map();
+
+  for (const [key, cell] of state.gridCells) {
+    const layer = L.rectangle(cellBounds(cell), {
+      className: "grid-cell",
+      renderer: gridRenderer,
+      pane: "gridPane",
+      color: "#cbd5e1",
+      fillColor: "#94a3b8",
+      fillOpacity: 0.12,
+      opacity: 0.35,
+      weight: 1,
+      interactive: false
+    }).addTo(gridLayerGroup);
+
+    state.cellLayers.set(key, layer);
+  }
+}
+
+function renderGrid(completedCells) {
+  for (const [key, layer] of state.cellLayers) {
+    const completedCell = completedCells.get(key);
+
+    if (completedCell) {
+      const color = cellColor(completedCell);
+      const intensity = cellIntensity(completedCell.visitCount);
+
+      layer.setStyle({
+        color,
+        fillColor: color,
+        fillOpacity: intensity,
+        opacity: Math.min(intensity + 0.24, 0.95),
+        weight: completedCell.visitCount > 1 ? 1.5 : 1.1
+      });
+    } else {
+      layer.setStyle({
+        color: "#cbd5e1",
+        fillColor: "#94a3b8",
+        fillOpacity: 0.12,
+        opacity: 0.35,
+        weight: 1
+      });
+    }
+  }
+}
+
+function refreshGridStyles() {
+  if (!state.completedCells) return;
+  if (state.gridRefreshFrame) return;
+
+  state.gridRefreshFrame = requestAnimationFrame(() => {
+    state.gridRefreshFrame = null;
+    renderGrid(state.completedCells);
+  });
+}
+
+function allCellMap(routes) {
+  const cells = new Map();
+
+  routes.forEach((route) => {
+    route.cells.forEach((key) => {
+      if (!cells.has(key)) {
+        cells.set(key, parseCellKey(key));
+      }
+    });
+  });
+
+  return cells;
+}
+
+function completedCellMap(routes) {
+  const cells = new Map();
+
+  routes.forEach((route) => {
+    route.cells.forEach((key) => {
+      const cell = cells.get(key) || {
+        route,
+        visitCount: 0,
+        types: new Set()
+      };
+
+      cell.route = route;
+      cell.visitCount += 1;
+      cell.types.add(route.type);
+      cells.set(key, cell);
+    });
+  });
+
+  return cells;
+}
+
+function cellColor(cell) {
+  if (cell.types.has("run") && cell.types.has("ride")) {
+    return colors.mixed;
+  }
+
+  if (cell.types.size > 1) {
+    return colors.mixed;
+  }
+
+  return colors[cell.types.values().next().value] || colors.other;
+}
+
+function cellIntensity(visitCount) {
+  return Math.min(0.28 + Math.log2(visitCount + 1) * 0.18, 0.88);
+}
+
+function routeCellKeys(route) {
+  const keys = new Set();
+  const points = route.coordinates.map(([longitude, latitude]) => ({ latitude, longitude }));
+
+  points.forEach((point) => keys.add(cellKeyForPoint(point)));
+
+  for (let index = 1; index < points.length; index += 1) {
+    interpolatedPoints(points[index - 1], points[index], gridCellMeters / 3).forEach((point) => {
+      keys.add(cellKeyForPoint(point));
+    });
+  }
+
+  return Array.from(keys);
+}
+
+function normalizedRouteSegments(route) {
+  const sourceSegments = Array.isArray(route.segments) && route.segments.length > 0
+    ? route.segments
+    : [route.coordinates || []];
+
+  return sourceSegments
+    .map((segment) =>
+      segment
+        .map(([longitude, latitude]) => [latitude, longitude])
+        .filter(([latitude, longitude]) => Number.isFinite(latitude) && Number.isFinite(longitude))
+    )
+    .filter((segment) => segment.length > 1);
+}
+
+function interpolatedPoints(start, end, maxStepMeters) {
+  const distance = haversineMeters(start, end);
+  const steps = Math.max(Math.ceil(distance / maxStepMeters), 1);
+  const points = [];
+
+  for (let step = 1; step < steps; step += 1) {
+    const progress = step / steps;
+    points.push({
+      latitude: start.latitude + (end.latitude - start.latitude) * progress,
+      longitude: start.longitude + (end.longitude - start.longitude) * progress
+    });
+  }
+
+  return points;
+}
+
+function cellKeyForPoint(point) {
+  const projected = map.options.crs.project(L.latLng(point.latitude, point.longitude));
+  const x = Math.floor(projected.x / gridCellMeters);
+  const y = Math.floor(projected.y / gridCellMeters);
+
+  return `${x}:${y}`;
+}
+
+function parseCellKey(key) {
+  const [x, y] = key.split(":").map(Number);
+  return { x, y };
+}
+
+function cellBounds(cell) {
+  const southWest = map.options.crs.unproject(
+    L.point(cell.x * gridCellMeters, cell.y * gridCellMeters)
+  );
+  const northEast = map.options.crs.unproject(
+    L.point((cell.x + 1) * gridCellMeters, (cell.y + 1) * gridCellMeters)
+  );
+
+  return L.latLngBounds(southWest, northEast);
+}
+
+function popupFor(route) {
+  return `
+    <strong>${escapeHtml(route.name)}</strong><br />
+    ${formatDate(route.date)}<br />
+    ${route.type} · ${route.distanceKm.toFixed(1)} km
+  `;
+}
+
+function formatDate(value) {
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric"
+  }).format(new Date(value));
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function haversineMeters(left, right) {
+  const earthRadiusMeters = 6_371_000;
+  const leftLatitude = toRadians(left.latitude);
+  const rightLatitude = toRadians(right.latitude);
+  const latitudeDelta = toRadians(right.latitude - left.latitude);
+  const longitudeDelta = toRadians(right.longitude - left.longitude);
+
+  const a =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(leftLatitude) *
+      Math.cos(rightLatitude) *
+      Math.sin(longitudeDelta / 2) ** 2;
+
+  return earthRadiusMeters * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function toRadians(degrees) {
+  return (degrees * Math.PI) / 180;
+}
+
+boot();

@@ -1,0 +1,9 @@
+node_modules/
+dist/
+exports/*
+!exports/.gitkeep
+gpx/*
+!gpx/.gitkeep
+public/routes.json
+activity-overrides.json
+.DS_Store
