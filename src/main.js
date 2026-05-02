@@ -4,9 +4,21 @@ import "./styles.css";
 
 const urlParams = new URLSearchParams(window.location.search);
 const isExportMode = urlParams.has("export");
+const isPreviewMode = urlParams.has("preview");
+const exportWidth = Number(urlParams.get("width") || 1080);
+const exportHeight = Number(urlParams.get("height") || 1920);
+
+if (isExportMode) {
+  applyExportDimensions();
+}
 
 if (isExportMode) {
   document.body.classList.add("export-mode");
+}
+
+if (isPreviewMode) {
+  document.body.classList.add("export-preview");
+  updateExportPreviewScale();
 }
 
 const colors = {
@@ -24,14 +36,14 @@ const traceColors = {
 
 const gridCellMeters = 1000;
 const minimumRevealDelayMs = 350;
-const minimumCameraLeadMs = 2200;
-const maximumCameraLeadMs = 5200;
 const minimumTraceDurationMs = 1700;
 const maximumTraceDurationMs = 4600;
 const finalOverviewDelayMs = 1400;
 const finalClusterRadiusCells = 14;
 const exportTitleDurationMs = Number(urlParams.get("titleMs") || 2800);
 const exportEndCardDelayMs = Number(urlParams.get("endCardDelayMs") || 1400);
+const defaultExportSpeedMs = 5200;
+const defaultPreviewSpeedMs = 3600;
 
 const state = {
   allRoutes: [],
@@ -66,6 +78,9 @@ map.createPane("gridPane");
 map.getPane("gridPane").style.zIndex = 410;
 map.getPane("gridPane").style.pointerEvents = "none";
 
+map.createPane("routePane");
+map.getPane("routePane").style.zIndex = 430;
+
 const gridRenderer = isExportMode
   ? L.canvas({ pane: "gridPane", padding: 1 })
   : L.svg({ pane: "gridPane", padding: 1 });
@@ -90,6 +105,8 @@ const elements = {
   exportTitle: document.querySelector("#export-title"),
   exportTitleCard: document.querySelector("#export-title-card"),
   exportTotalDistance: document.querySelector("#export-total-distance"),
+  instagramPreviewButtons: document.querySelectorAll(".instagram-preview-button"),
+  instagramCurrentSpeedButton: document.querySelector("#instagram-current-speed-button"),
   playButton: document.querySelector("#play-button"),
   resetButton: document.querySelector("#reset-button"),
   routeCount: document.querySelector("#route-count"),
@@ -121,6 +138,7 @@ async function boot() {
     applyExportDefaults();
     applyFilter();
     exposeAppControls();
+    applyAutoplay();
   } catch (error) {
     console.error(error);
     elements.emptyState.hidden = false;
@@ -129,6 +147,7 @@ async function boot() {
 
 function bindControls() {
   window.addEventListener("resize", () => {
+    updateExportPreviewScale();
     map.invalidateSize();
     refreshGridStyles();
   });
@@ -160,17 +179,66 @@ function bindControls() {
     fitAllRoutes();
   });
 
+  elements.instagramPreviewButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      openInstagramPreview({
+        height: Number(button.dataset.height),
+        speed: defaultPreviewSpeedMs,
+        width: Number(button.dataset.width)
+      });
+    });
+  });
+
+  elements.instagramCurrentSpeedButton.addEventListener("click", () => {
+    openInstagramPreview({
+      height: exportHeight,
+      speed: Number(elements.speed.value),
+      width: exportWidth
+    });
+  });
+
   elements.showRouteTrace.addEventListener("change", render);
+}
+
+function openInstagramPreview({ height, speed, width }) {
+  const previewUrl = new URL(window.location.href);
+  previewUrl.searchParams.set("export", "1");
+  previewUrl.searchParams.set("preview", "1");
+  previewUrl.searchParams.set("autoplay", "1");
+  previewUrl.searchParams.set("speed", String(speed));
+  previewUrl.searchParams.set("width", String(width));
+  previewUrl.searchParams.set("height", String(height));
+  previewUrl.searchParams.delete("activity");
+
+  window.open(previewUrl.toString(), "_blank", "noopener,noreferrer");
+}
+
+function applyExportDimensions() {
+  document.documentElement.style.setProperty("--export-width", `${exportWidth}px`);
+  document.documentElement.style.setProperty("--export-height", `${exportHeight}px`);
+}
+
+function updateExportPreviewScale() {
+  if (!isPreviewMode) return;
+
+  const scale = Math.min(window.innerWidth / exportWidth, window.innerHeight / exportHeight);
+  document.documentElement.style.setProperty("--export-preview-scale", String(scale));
 }
 
 function applyExportDefaults() {
   if (!isExportMode) return;
 
-  elements.speed.value = urlParams.get("speed") || "5200";
+  elements.speed.value = urlParams.get("speed") || String(isPreviewMode ? defaultPreviewSpeedMs : defaultExportSpeedMs);
   elements.exportTitle.textContent = urlParams.get("title") || "A year of running & cycling";
   elements.exportSubtitle.textContent =
     urlParams.get("subtitle") || "Every square unlocked, one activity at a time.";
   elements.exportKicker.textContent = urlParams.get("kicker") || "Route Progress";
+}
+
+function applyAutoplay() {
+  if (!urlParams.has("autoplay")) return;
+
+  window.setTimeout(play, 150);
 }
 
 function applyFilter() {
@@ -250,6 +318,7 @@ function tick() {
     state.timer = window.setTimeout(() => {
       if (!state.isPlaying) return;
 
+      clearRouteLayers();
       showFinalOverview();
       state.timer = window.setTimeout(() => {
         if (!state.isPlaying) return;
@@ -262,18 +331,24 @@ function tick() {
   }
 
   const nextIndex = state.index + 1;
+  clearRouteLayers();
   const cameraMoved = focusPlaybackView(nextIndex);
-  const cameraLeadMs = cameraMoved ? revealLeadMs() : 0;
   const followUpDelayMs = postRevealDelayMs();
 
-  state.timer = window.setTimeout(() => {
+  const revealRoute = () => {
     if (!state.isPlaying) return;
 
     state.index = nextIndex;
     render();
 
     state.timer = window.setTimeout(tick, followUpDelayMs);
-  }, cameraLeadMs);
+  };
+
+  if (cameraMoved) {
+    waitForCameraMove(revealRoute);
+  } else {
+    revealRoute();
+  }
 }
 
 function showFinalOverview() {
@@ -297,15 +372,6 @@ function showExportEndCard() {
   document.body.classList.add("export-ended");
 }
 
-function revealLeadMs() {
-  if (!elements.cinematicPan.checked) return 0;
-
-  return Math.min(
-    Math.max(Math.round(Number(elements.speed.value) * 0.78), minimumCameraLeadMs),
-    maximumCameraLeadMs
-  );
-}
-
 function postRevealDelayMs() {
   if (elements.showRouteTrace.checked) {
     return traceDurationMs();
@@ -325,18 +391,37 @@ function waitForMapLayout() {
   });
 }
 
+function waitForCameraMove(callback) {
+  let isDone = false;
+
+  const finish = () => {
+    if (isDone) return;
+
+    isDone = true;
+    map.off("moveend", finish);
+    window.clearTimeout(state.timer);
+    callback();
+  };
+
+  map.once("moveend", finish);
+  state.timer = window.setTimeout(finish, 2400);
+}
+
 function render() {
   clearRouteLayers();
 
   const visibleRoutes = state.filteredRoutes.slice(0, state.index + 1);
   const latestRoute = visibleRoutes.at(-1);
+  const previousRoutes = latestRoute ? visibleRoutes.slice(0, -1) : visibleRoutes;
   const visibleDistance = visibleRoutes.reduce((sum, route) => sum + route.distanceKm, 0);
-  const completedCells = completedCellMap(visibleRoutes);
+  const completedCells = latestRoute && elements.showRouteTrace.checked
+    ? completedCellMap(previousRoutes)
+    : completedCellMap(visibleRoutes);
 
   state.completedCells = completedCells;
   renderGrid(completedCells);
   if (latestRoute && elements.showRouteTrace.checked) {
-    renderAnimatedRouteTrace(latestRoute);
+    renderAnimatedRouteTrace(latestRoute, completedCells);
   }
 
   elements.routeCount.textContent = String(completedCells.size);
@@ -363,6 +448,12 @@ function updateExportEndCard() {
   elements.exportEndDistance.textContent = `${distance.toFixed(1)} km`;
   elements.exportEndSquares.textContent = String(completedCells.size);
   elements.exportEndSplit.textContent = `${runs} / ${rides}`;
+}
+
+function updateVisibleSquareCounts(completedCells) {
+  elements.routeCount.textContent = String(completedCells.size);
+  elements.exportRouteCount.textContent = String(completedCells.size);
+  updateExportEndCard();
 }
 
 function focusPlaybackView(targetIndex = state.index) {
@@ -434,7 +525,7 @@ function clearRouteLayers() {
   state.routeLayers = [];
 }
 
-function renderAnimatedRouteTrace(route) {
+function renderAnimatedRouteTrace(route, baseCompletedCells = state.completedCells) {
   const color = traceColors[route.type] || traceColors.other;
   const token = state.routeAnimationToken;
   const totalDistance = route.segments.reduce((sum, segment) => sum + segmentDistanceMeters(segment), 0);
@@ -446,7 +537,7 @@ function renderAnimatedRouteTrace(route) {
     if (token !== state.routeAnimationToken) return;
 
     const progress = Math.min((timestamp - startedAt) / durationMs, 1);
-    drawRouteProgress(route, color, totalDistance * progress);
+    drawRouteProgress(route, color, totalDistance * progress, baseCompletedCells);
 
     if (progress < 1) {
       state.routeAnimationFrame = requestAnimationFrame((nextTimestamp) => {
@@ -460,7 +551,7 @@ function renderAnimatedRouteTrace(route) {
   });
 }
 
-function drawRouteProgress(route, color, targetDistanceMeters) {
+function drawRouteProgress(route, color, targetDistanceMeters, baseCompletedCells) {
   routeLayerGroup.clearLayers();
 
   let remainingDistance = targetDistanceMeters;
@@ -485,11 +576,22 @@ function drawRouteProgress(route, color, targetDistanceMeters) {
     }
   }
 
+  const completedCells = completedCellMapWithRouteCells(
+    baseCompletedCells,
+    route,
+    cellKeysForLatLngSegments(visibleSegments)
+  );
+
+  state.completedCells = completedCells;
+  renderGrid(completedCells);
+  updateVisibleSquareCounts(completedCells);
+
   if (visibleSegments.length === 0) return;
 
   const layer = L.polyline(visibleSegments, {
     color,
-    opacity: 0.95,
+    opacity: 1,
+    pane: "routePane",
     weight: 4,
     lineCap: "round",
     lineJoin: "round"
@@ -722,6 +824,56 @@ function completedCellMap(routes) {
   });
 
   return cells;
+}
+
+function completedCellMapWithRouteCells(baseCells, route, routeCellKeys) {
+  const cells = cloneCompletedCellMap(baseCells);
+
+  routeCellKeys.forEach((key) => {
+    const cell = cells.get(key) || {
+      ...parseCellKey(key),
+      route,
+      visitCount: 0,
+      types: new Set()
+    };
+
+    cell.route = route;
+    cell.visitCount += 1;
+    cell.types.add(route.type);
+    cells.set(key, cell);
+  });
+
+  return cells;
+}
+
+function cloneCompletedCellMap(cells) {
+  return new Map(
+    Array.from(cells.entries()).map(([key, cell]) => [
+      key,
+      {
+        ...cell,
+        types: new Set(cell.types)
+      }
+    ])
+  );
+}
+
+function cellKeysForLatLngSegments(segments) {
+  const keys = new Set();
+
+  segments.forEach((segment) => {
+    const points = segment.map(([latitude, longitude]) => ({ latitude, longitude }));
+
+    points.forEach((point) => keys.add(cellKeyForPoint(point)));
+
+    for (let index = 1; index < points.length; index += 1) {
+      interpolatedPoints(points[index - 1], points[index], gridCellMeters / 3).forEach((point) => {
+        keys.add(cellKeyForPoint(point));
+      });
+    }
+  });
+
+  return Array.from(keys);
 }
 
 function cellColor(cell) {

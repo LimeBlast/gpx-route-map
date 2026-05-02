@@ -10,7 +10,9 @@
     "build:routes": "node scripts/build-routes.mjs",
     "render:instagram": "node scripts/render-instagram.mjs",
     "render:draft": "FPS=15 OUTPUT=exports/draft-route-map.mp4 npm run render:instagram",
-    "render:final": "FPS=30 OUTPUT=exports/instagram-route-map.mp4 npm run render:instagram"
+    "render:final": "FPS=30 OUTPUT=exports/instagram-route-map.mp4 npm run render:instagram",
+    "render:feed": "WIDTH=1080 HEIGHT=1350 FPS=30 OUTPUT=exports/instagram-feed-4x5.mp4 npm run render:instagram",
+    "render:square": "WIDTH=1080 HEIGHT=1080 FPS=30 OUTPUT=exports/instagram-square.mp4 npm run render:instagram"
   },
   "dependencies": {
     "@xmldom/xmldom": "^0.8.10",

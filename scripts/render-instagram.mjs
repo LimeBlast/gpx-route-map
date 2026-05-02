@@ -21,6 +21,8 @@ const cdpCommandTimeoutMs = Number(process.env.CDP_COMMAND_TIMEOUT_MS || 20_000)
 const exportParams = new URLSearchParams({
   export: "1",
   speed: String(exportSpeed),
+  width: String(width),
+  height: String(height),
   title: process.env.VIDEO_TITLE || "A year of running & cycling",
   subtitle: process.env.VIDEO_SUBTITLE || "Every square unlocked, one activity at a time.",
   kicker: process.env.VIDEO_KICKER || "Route Progress",

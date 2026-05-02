@@ -61,13 +61,15 @@ Useful presets:
 ```sh
 npm run render:draft
 npm run render:final
+npm run render:feed
+npm run render:square
 ```
 
 The renderer:
 
 - rebuilds `public/routes.json` and the Vite app
 - shows a title card before playback starts
-- opens the export view in headless Google Chrome at `1080 × 1920`
+- opens the export view in headless Google Chrome, defaulting to `1080 × 1920`
 - records PNG frames while the cinematic playback runs
 - converts those frames to `exports/instagram-route-map.mp4` using `ffmpeg`
 - includes a small stats box at the bottom with squares, distance, and date
@@ -76,10 +78,11 @@ The renderer:
 Optional settings:
 
 ```sh
-OUTPUT=exports/my-video.mp4 FPS=30 END_HOLD_SECONDS=3 EXPORT_SPEED=6500 MAX_RENDER_MINUTES=90 VIDEO_TITLE="2025 in motion" npm run render:instagram
+OUTPUT=exports/my-video.mp4 WIDTH=1080 HEIGHT=1350 FPS=30 END_HOLD_SECONDS=3 EXPORT_SPEED=6500 MAX_RENDER_MINUTES=90 VIDEO_TITLE="2025 in motion" npm run render:instagram
 ```
 
 Higher `EXPORT_SPEED` values make the animation slower. The default export speed is `5200`.
+Browser preview buttons use `3600` by default because live browser playback runs slower than captured export playback.
 The default render timeout is `60` minutes.
 You can also set `VIDEO_SUBTITLE`, `VIDEO_KICKER`, `VIDEO_END_TITLE`, `TITLE_MS`, and `END_CARD_DELAY_MS`.
 

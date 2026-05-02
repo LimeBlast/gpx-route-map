@@ -143,6 +143,31 @@ h1 {
   gap: 0.75rem;
 }
 
+.export-launcher {
+  display: grid;
+  gap: 0.65rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.export-launcher p {
+  margin: 0;
+  color: #93c5fd;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.export-launcher button {
+  color: #f8fafc;
+  background: #7c3aed;
+}
+
+.export-launcher button:hover {
+  background: #8b5cf6;
+}
+
 button {
   min-height: 2.6rem;
   color: #06111f;
@@ -266,16 +291,16 @@ button:hover {
 }
 
 .export-mode {
-  width: 1080px;
-  height: 1920px;
+  width: var(--export-width, 1080px);
+  height: var(--export-height, 1920px);
   overflow: hidden;
   background: #d1d5db;
 }
 
 .export-mode #app {
   display: block;
-  width: 1080px;
-  height: 1920px;
+  width: var(--export-width, 1080px);
+  height: var(--export-height, 1920px);
   min-height: 0;
 }
 
@@ -284,8 +309,8 @@ button:hover {
 }
 
 .export-mode .map-panel {
-  width: 1080px;
-  height: 1920px;
+  width: var(--export-width, 1080px);
+  height: var(--export-height, 1920px);
   min-height: 0;
 }
 
@@ -295,6 +320,24 @@ button:hover {
 
 .export-mode .leaflet-control-container {
   display: none;
+}
+
+.export-preview {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top, rgba(56, 189, 248, 0.16), transparent 34%),
+    #08111f;
+}
+
+.export-preview #app {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(var(--export-preview-scale, 0.5));
+  transform-origin: center;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.42);
 }
 
 .export-mode .export-card {
