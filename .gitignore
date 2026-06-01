@@ -7,3 +7,4 @@ gpx/*
 public/routes.json
 activity-overrides.json
 .DS_Store
+logs/
