@@ -36,7 +36,7 @@ const height = Number(process.env.HEIGHT || 1920);
 const endHoldSeconds = Number(process.env.END_HOLD_SECONDS || 1.5);
 const frameLimit = Number(process.env.FRAME_LIMIT || 0);
 const progressIntervalMs = Number(process.env.PROGRESS_INTERVAL_MS || 2000);
-const exportSpeed = Number(process.env.EXPORT_SPEED || 20800);
+const exportSpeed = Number(process.env.EXPORT_SPEED || 2000);
 const finalOverviewHoldFrames = fps * Number(process.env.FINAL_HOLD_SECONDS || 2);
 const endHoldFrames = fps * endHoldSeconds;
 const maxRenderMinutes = Number(process.env.MAX_RENDER_MINUTES || 60);
@@ -46,7 +46,7 @@ const exportParams = new URLSearchParams({
   speed: String(exportSpeed),
   width: String(width),
   height: String(height),
-  title: process.env.VIDEO_TITLE || (monthDisplay ? `${monthDisplay} · Running & Cycling` : "A year of running & cycling"),
+  title: process.env.VIDEO_TITLE || "Running & Cycling",
   subtitle: process.env.VIDEO_SUBTITLE || "Every square unlocked, one activity at a time.",
   kicker: process.env.VIDEO_KICKER || (monthDisplay || "Route Progress"),
   endTitle: process.env.VIDEO_END_TITLE || monthDisplay || "Progress unlocked",
@@ -99,8 +99,6 @@ try {
   let frame = 0;
   let finishedAt = null;
   let finishedAtFrame = null;
-  let endCardShown = false;
-  let endCardShownAtFrame = null;
   let lastRouteIndex = -1;
   let currentStep = "starting";
   const startedAt = Date.now();
@@ -119,50 +117,67 @@ try {
   await evaluate(client, "window.routeProgressApp.play()");
   const heartbeat = setInterval(logProgress, progressIntervalMs);
 
-  while (true) {
-    currentStep = "capturing screenshot";
-    const screenshot = await client.send("Page.captureScreenshot", {
-      format: "png",
-      captureBeyondViewport: false
+  await client.send("Page.startScreencast", { format: "jpeg", quality: 90, everyNthFrame: 1 });
+
+  await new Promise((resolve, reject) => {
+    let done = false;
+    const holdMs = Math.round((finalOverviewHoldFrames / fps) * 1000);
+    const endCardMs = Math.round((endHoldFrames / fps) * 1000);
+
+    const finish = async () => {
+      if (done) return;
+      done = true;
+      await client.send("Page.stopScreencast").catch(() => {});
+      unsubscribe();
+      resolve();
+    };
+
+    const unsubscribe = client.on("Page.screencastFrame", async (params) => {
+      try {
+        frame += 1;
+        currentStep = "writing frame";
+        await writeFile(path.join(frameDir, `frame-${String(frame).padStart(6, "0")}.jpg`), params.data, "base64");
+        await client.send("Page.screencastFrameAck", { sessionId: params.sessionId });
+
+        if (frameLimit > 0 && frame >= frameLimit) return finish();
+
+        if (Date.now() - startedAt > maxRenderMinutes * 60 * 1000) {
+          done = true;
+          await client.send("Page.stopScreencast").catch(() => {});
+          unsubscribe();
+          return reject(new Error(`Timed out after ${maxRenderMinutes} minutes while rendering video`));
+        }
+
+        if (finishedAt == null && frame % 10 === 0) {
+          currentStep = "reading app state";
+          const appState = await evaluate(client, "window.routeProgressApp.state()");
+          lastRouteIndex = appState.index;
+          windowRouteCount = appState.routeCount;
+
+          if (appState.isComplete && !appState.isPlaying) {
+            finishedAt = Date.now();
+            finishedAtFrame = frame;
+            console.log(`→ animation complete at frame ${frame} (${((finishedAt - startedAt) / 1000).toFixed(1)}s), hold ${holdMs}ms then end card for ${endCardMs}ms`);
+
+            // Use timers rather than frame counts — Chrome stops sending frames
+            // when the page is static, so we can't rely on frame events arriving.
+            setTimeout(async () => {
+              if (done) return;
+              console.log(`→ showing end card`);
+              await evaluate(client, "window.routeProgressApp.showEndCard()").catch(() => {});
+              // CSS fade-in triggers new frames; stop after end card hold
+              setTimeout(finish, endCardMs);
+            }, holdMs);
+          }
+        }
+      } catch (error) {
+        done = true;
+        await client.send("Page.stopScreencast").catch(() => {});
+        unsubscribe();
+        reject(error);
+      }
     });
-    frame += 1;
-    currentStep = "writing frame";
-    await writeFile(path.join(frameDir, `frame-${String(frame).padStart(6, "0")}.png`), screenshot.data, "base64");
-
-    currentStep = "reading app state";
-    const appState = await evaluate(client, "window.routeProgressApp.state()");
-    lastRouteIndex = appState.index;
-    windowRouteCount = appState.routeCount;
-
-    if (appState.isComplete && !appState.isPlaying && finishedAt == null) {
-      finishedAt = Date.now();
-      finishedAtFrame = frame;
-      console.log(`→ animation complete at frame ${frame} (${((finishedAt - startedAt) / 1000).toFixed(1)}s), holding for ${finalOverviewHoldFrames} frames`);
-    }
-
-    if (finishedAtFrame != null && !endCardShown && frame - finishedAtFrame >= finalOverviewHoldFrames) {
-      console.log(`→ showing end card at frame ${frame} (+${frame - finishedAtFrame} hold frames)`);
-      currentStep = "showing end card";
-      await evaluate(client, "window.routeProgressApp.showEndCard()");
-      endCardShown = true;
-      endCardShownAtFrame = frame;
-    }
-
-    if (endCardShownAtFrame != null && frame - endCardShownAtFrame >= endHoldFrames) {
-      break;
-    }
-
-    if (frameLimit > 0 && frame >= frameLimit) {
-      break;
-    }
-
-    if (Date.now() - startedAt > maxRenderMinutes * 60 * 1000) {
-      throw new Error(`Timed out after ${maxRenderMinutes} minutes while rendering video`);
-    }
-
-    currentStep = "waiting";
-    await sleep(1000 / fps);
-  }
+  });
 
   clearInterval(heartbeat);
   console.log(`Encoding ${frame} frames with ffmpeg...`);
@@ -171,7 +186,7 @@ try {
     "-framerate",
     String(fps),
     "-i",
-    path.join(frameDir, "frame-%06d.png"),
+    path.join(frameDir, "frame-%06d.jpg"),
     "-vf",
     "format=yuv420p",
     "-c:v",
@@ -353,6 +368,15 @@ function createCdpClient(socket) {
         eventListeners.push(resolve);
         listeners.set(method, eventListeners);
       });
+    },
+    on(method, callback) {
+      const eventListeners = listeners.get(method) || [];
+      eventListeners.push(callback);
+      listeners.set(method, eventListeners);
+      return () => {
+        const filtered = (listeners.get(method) || []).filter((l) => l !== callback);
+        listeners.set(method, filtered);
+      };
     }
   };
 }

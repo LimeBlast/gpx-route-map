@@ -49,7 +49,7 @@ MONTH=2025-04 npm run render:instagram
 
 | Variable | Default | Effect |
 |---|---|---|
-| `EXPORT_SPEED` | `20800` | Animation pace — higher is slower |
+| `EXPORT_SPEED` | `2000` | Animation pace — higher is slower |
 | `FPS` | `30` | Output frame rate |
 | `FINAL_HOLD_SECONDS` | `2` | How long to hold on the final map before the stats card |
 | `END_HOLD_SECONDS` | `1.5` | How long to hold on the stats card |

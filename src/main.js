@@ -36,11 +36,11 @@ const traceColors = {
 
 const gridCellMeters = 1000;
 const minimumRevealDelayMs = 350;
-const minimumTraceDurationMs = 1700;
-const maximumTraceDurationMs = 6000;
-const postTraceHoldMs = 1200;
-const preRevealAfterPanMs = 500;
-const panDurationSeconds = 1.8;
+const minimumTraceDurationMs = 800;
+const maximumTraceDurationMs = 2000;
+const postTraceHoldMs = 500;
+const preRevealAfterPanMs = 200;
+const panDurationSeconds = 1.0;
 const finalOverviewDelayMs = 1400;
 const finalClusterRadiusCells = 14;
 const exportTitleDurationMs = Number(urlParams.get("titleMs") || 2800);
@@ -95,6 +95,8 @@ const elements = {
   currentDate: document.querySelector("#current-date"),
   emptyState: document.querySelector("#empty-state"),
   exportCurrentDate: document.querySelector("#export-current-date"),
+  activityCallout: document.querySelector("#export-activity-callout"),
+  calloutIcon: document.querySelector("#callout-icon"),
   exportEndActivities: document.querySelector("#export-end-activities"),
   exportEndCard: document.querySelector("#export-end-card"),
   exportEndRunDistance: document.querySelector("#export-end-run-distance"),
@@ -141,6 +143,11 @@ async function boot() {
     bindControls();
     applyExportDefaults();
     applyFilter();
+    const monthLabel = routesMonthLabel(state.allRoutes);
+    if (monthLabel) {
+      const sidebarTitle = document.querySelector("#sidebar-title");
+      if (sidebarTitle) sidebarTitle.textContent = `${monthLabel} · Running & Cycling`;
+    }
     exposeAppControls();
     applyAutoplay();
   } catch (error) {
@@ -229,16 +236,21 @@ function updateExportPreviewScale() {
   document.documentElement.style.setProperty("--export-preview-scale", String(scale));
 }
 
+function routesMonthLabel(routes) {
+  if (routes.length === 0) return null;
+  return new Date(routes[0].date).toLocaleString("en-GB", { month: "long", year: "numeric" });
+}
+
 function applyExportDefaults() {
   if (!isExportMode) return;
 
+  const monthLabel = routesMonthLabel(state.allRoutes);
   const speedValue = Number(urlParams.get("speed") || (isPreviewMode ? defaultPreviewSpeedMs : defaultExportSpeedMs));
   elements.speed.max = String(Math.max(speedValue, Number(elements.speed.max)));
   elements.speed.value = String(speedValue);
-  elements.exportTitle.textContent = urlParams.get("title") || "A year of running & cycling";
-  elements.exportSubtitle.textContent =
-    urlParams.get("subtitle") || "Every square unlocked, one activity at a time.";
-  elements.exportKicker.textContent = urlParams.get("kicker") || "Route Progress";
+  elements.exportTitle.textContent = urlParams.get("title") || "Running & Cycling";
+  elements.exportSubtitle.textContent = urlParams.get("subtitle") || "Every square unlocked, one activity at a time.";
+  elements.exportKicker.textContent = urlParams.get("kicker") || monthLabel || "Route Progress";
 }
 
 function applyAutoplay() {
@@ -323,6 +335,8 @@ function clampTimelineIndex(index) {
 function tick() {
   if (!state.isPlaying) return;
 
+  hideActivityCallout();
+
   if (state.index >= state.filteredRoutes.length - 1) {
     state.timer = window.setTimeout(() => {
       if (!state.isPlaying) return;
@@ -344,6 +358,7 @@ function tick() {
 
     state.index = nextIndex;
     render();
+    showActivityCallout(state.filteredRoutes[nextIndex]);
 
     state.timer = window.setTimeout(tick, followUpDelayMs);
   };
@@ -451,7 +466,7 @@ function updateExportEndCard() {
   const runDistance = runs.reduce((sum, route) => sum + route.distanceKm, 0);
   const rideDistance = rides.reduce((sum, route) => sum + route.distanceKm, 0);
 
-  elements.exportEndTitle.textContent = urlParams.get("endTitle") || "Progress unlocked";
+  elements.exportEndTitle.textContent = urlParams.get("endTitle") || routesMonthLabel(state.allRoutes) || "Progress unlocked";
   elements.exportEndActivities.textContent = String(routeSource.length);
   elements.exportEndSquares.textContent = String(completedCells.size);
   elements.exportEndRunDistance.textContent = `${runDistance.toFixed(1)} km`;
@@ -464,6 +479,12 @@ function updateVisibleSquareCounts(completedCells) {
   elements.routeCount.textContent = String(completedCells.size);
   elements.exportRouteCount.textContent = String(completedCells.size);
   updateExportEndCard();
+}
+
+function updateVisibleDistance(distanceKm) {
+  const text = `${distanceKm.toFixed(1)} km`;
+  elements.totalDistance.textContent = text;
+  elements.exportTotalDistance.textContent = text;
 }
 
 function focusPlaybackView(targetIndex = state.index) {
@@ -595,6 +616,10 @@ function drawRouteProgress(route, color, targetDistanceMeters, baseCompletedCell
   state.completedCells = completedCells;
   renderGrid(completedCells);
   updateVisibleSquareCounts(completedCells);
+  updateVisibleDistance(
+    state.filteredRoutes.slice(0, state.index).reduce((sum, r) => sum + r.distanceKm, 0) +
+      targetDistanceMeters / 1000
+  );
 
   if (visibleSegments.length === 0) return;
 
@@ -1014,6 +1039,21 @@ function haversineMeters(left, right) {
 
 function toRadians(degrees) {
   return (degrees * Math.PI) / 180;
+}
+
+const activityIcons = {
+  run: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 10.42 4.8-5.07"/><path d="M19 18h3"/><path d="M9.5 22 21.414 9.415A2 2 0 0 0 21.2 6.4l-5.61-4.208A1 1 0 0 0 14 3v2a2 2 0 0 1-1.394 1.906L8.677 8.053A1 1 0 0 0 8 9c-.155 6.393-2.082 9-4 9a2 2 0 0 0 0 4h14"/></svg>`,
+  ride: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/></svg>`
+};
+
+function showActivityCallout(route) {
+  elements.calloutIcon.className = `callout-icon ${route.type}`;
+  elements.calloutIcon.innerHTML = activityIcons[route.type] || "";
+  elements.activityCallout.classList.add("visible");
+}
+
+function hideActivityCallout() {
+  elements.activityCallout.classList.remove("visible");
 }
 
 boot();

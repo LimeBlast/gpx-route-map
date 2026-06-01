@@ -483,6 +483,60 @@ button:hover {
   font-size: 2.5rem;
 }
 
+.export-activity-callout {
+  display: none;
+}
+
+.export-mode .export-activity-callout {
+  position: absolute;
+  top: 48px;
+  right: 48px;
+  z-index: 720;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  height: 96px;
+  background: rgba(8, 17, 31, 0.88);
+  border: 1px solid rgba(226, 232, 240, 0.2);
+  border-radius: 50%;
+  box-shadow: 0 8px 40px rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(16px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 500ms ease;
+}
+
+.export-mode .export-activity-callout.visible {
+  opacity: 1;
+}
+
+.callout-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.callout-icon svg {
+  width: 3.2rem;
+  height: 3.2rem;
+}
+
+.callout-icon.run svg {
+  stroke: #86efac;
+}
+
+.callout-icon.ride svg {
+  stroke: #7dd3fc;
+}
+
+#callout-meta {
+  color: #e5edf8;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
 .export-mode .export-stats {
   position: absolute;
   left: 50%;

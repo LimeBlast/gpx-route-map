@@ -8,11 +8,11 @@
   <body>
     <main id="app">
       <section class="sidebar">
-        <p class="eyebrow">Activity Progress</p>
-        <h1>Running & Cycling Map</h1>
+        <p class="eyebrow">Monthly Reel</p>
+        <h1 id="sidebar-title">Running & Cycling</h1>
         <p class="intro">
-          Drop GPX or FIT files into <code>gpx/</code>, build the route index, and
-          watch map squares fill in as your activities unlock them chronologically.
+          Drop last month's GPX or FIT files into <code>gpx/</code>, then run
+          <code>npm run render:monthly</code> to produce the video.
         </p>
 
         <div class="stats" aria-label="Route statistics">
@@ -89,7 +89,7 @@
         <div id="map"></div>
         <section id="export-title-card" class="export-card export-title-card" aria-label="Export title card">
           <p id="export-kicker">Route Progress</p>
-          <h2 id="export-title">A year of running & cycling</h2>
+          <h2 id="export-title">Monthly Running & Cycling</h2>
           <p id="export-subtitle">Every square unlocked, one activity at a time.</p>
           <div class="export-legend" aria-label="Map legend">
             <span><i class="legend-run"></i> Runs</span>
@@ -121,6 +121,10 @@
             </div>
           </div>
         </section>
+        <div id="export-activity-callout" class="export-activity-callout" aria-label="Current activity">
+          <span id="callout-icon" class="callout-icon"></span>
+        </div>
+
         <aside class="export-stats" aria-label="Export video statistics">
           <div>
             <span>Squares</span>
