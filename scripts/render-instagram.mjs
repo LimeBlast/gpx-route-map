@@ -8,14 +8,37 @@ import { fileURLToPath } from "node:url";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const distDir = path.join(rootDir, "dist");
-const outputPath = path.resolve(process.env.OUTPUT || path.join(rootDir, "exports", "instagram-route-map.mp4"));
+
+function lastMonth() {
+  const now = new Date();
+  const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+const month = process.env.MONTH || (process.env.MONTHLY === "1" ? lastMonth() : "");
+
+function monthLabel(m) {
+  if (!m) return null;
+  const [year, monthNum] = m.split("-").map(Number);
+  return new Date(year, monthNum - 1, 1).toLocaleString("en-GB", { month: "long", year: "numeric" });
+}
+
+const monthDisplay = monthLabel(month);
+const outputPath = path.resolve(
+  process.env.OUTPUT ||
+    (month
+      ? path.join(rootDir, "exports", `monthly-${month}.mp4`)
+      : path.join(rootDir, "exports", "instagram-route-map.mp4"))
+);
 const fps = Number(process.env.FPS || 30);
 const width = Number(process.env.WIDTH || 1080);
 const height = Number(process.env.HEIGHT || 1920);
-const endHoldSeconds = Number(process.env.END_HOLD_SECONDS || 2);
+const endHoldSeconds = Number(process.env.END_HOLD_SECONDS || 1.5);
 const frameLimit = Number(process.env.FRAME_LIMIT || 0);
 const progressIntervalMs = Number(process.env.PROGRESS_INTERVAL_MS || 2000);
-const exportSpeed = Number(process.env.EXPORT_SPEED || 5200);
+const exportSpeed = Number(process.env.EXPORT_SPEED || 20800);
+const finalOverviewHoldFrames = fps * Number(process.env.FINAL_HOLD_SECONDS || 2);
+const endHoldFrames = fps * endHoldSeconds;
 const maxRenderMinutes = Number(process.env.MAX_RENDER_MINUTES || 60);
 const cdpCommandTimeoutMs = Number(process.env.CDP_COMMAND_TIMEOUT_MS || 20_000);
 const exportParams = new URLSearchParams({
@@ -23,19 +46,19 @@ const exportParams = new URLSearchParams({
   speed: String(exportSpeed),
   width: String(width),
   height: String(height),
-  title: process.env.VIDEO_TITLE || "A year of running & cycling",
+  title: process.env.VIDEO_TITLE || (monthDisplay ? `${monthDisplay} · Running & Cycling` : "A year of running & cycling"),
   subtitle: process.env.VIDEO_SUBTITLE || "Every square unlocked, one activity at a time.",
-  kicker: process.env.VIDEO_KICKER || "Route Progress",
-  endTitle: process.env.VIDEO_END_TITLE || "Progress unlocked",
-  titleMs: process.env.TITLE_MS || "2800",
-  endCardDelayMs: process.env.END_CARD_DELAY_MS || "1400"
+  kicker: process.env.VIDEO_KICKER || (monthDisplay || "Route Progress"),
+  endTitle: process.env.VIDEO_END_TITLE || monthDisplay || "Progress unlocked",
+  titleMs: process.env.TITLE_MS || "2800"
 });
 const chromeDebugPort = Number(process.env.CHROME_DEBUG_PORT || 9223);
 const chromePath =
   process.env.CHROME_PATH ||
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
-await run("npm", ["run", "build"]);
+await run("npm", ["run", "build:routes"], month ? { MONTH: month } : {});
+await run("npm", ["run", "build:app"]);
 await mkdir(path.dirname(outputPath), { recursive: true });
 
 const frameDir = await mkdtemp(path.join(tmpdir(), "route-progress-frames-"));
@@ -75,6 +98,9 @@ try {
 
   let frame = 0;
   let finishedAt = null;
+  let finishedAtFrame = null;
+  let endCardShown = false;
+  let endCardShownAtFrame = null;
   let lastRouteIndex = -1;
   let currentStep = "starting";
   const startedAt = Date.now();
@@ -110,9 +136,19 @@ try {
 
     if (appState.isComplete && !appState.isPlaying && finishedAt == null) {
       finishedAt = Date.now();
+      finishedAtFrame = frame;
+      console.log(`→ animation complete at frame ${frame} (${((finishedAt - startedAt) / 1000).toFixed(1)}s), holding for ${finalOverviewHoldFrames} frames`);
     }
 
-    if (finishedAt && Date.now() - finishedAt >= endHoldSeconds * 1000) {
+    if (finishedAtFrame != null && !endCardShown && frame - finishedAtFrame >= finalOverviewHoldFrames) {
+      console.log(`→ showing end card at frame ${frame} (+${frame - finishedAtFrame} hold frames)`);
+      currentStep = "showing end card";
+      await evaluate(client, "window.routeProgressApp.showEndCard()");
+      endCardShown = true;
+      endCardShownAtFrame = frame;
+    }
+
+    if (endCardShownAtFrame != null && frame - endCardShownAtFrame >= endHoldFrames) {
       break;
     }
 
@@ -156,11 +192,12 @@ try {
   await rm(frameDir, { recursive: true, force: true });
 }
 
-function run(command, args) {
+function run(command, args, env = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd: rootDir,
-      stdio: "inherit"
+      stdio: "inherit",
+      env: { ...process.env, ...env }
     });
 
     child.on("exit", (code) => {

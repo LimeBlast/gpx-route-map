@@ -37,11 +37,13 @@ const traceColors = {
 const gridCellMeters = 1000;
 const minimumRevealDelayMs = 350;
 const minimumTraceDurationMs = 1700;
-const maximumTraceDurationMs = 4600;
+const maximumTraceDurationMs = 6000;
+const postTraceHoldMs = 1200;
+const preRevealAfterPanMs = 500;
+const panDurationSeconds = 1.8;
 const finalOverviewDelayMs = 1400;
 const finalClusterRadiusCells = 14;
 const exportTitleDurationMs = Number(urlParams.get("titleMs") || 2800);
-const exportEndCardDelayMs = Number(urlParams.get("endCardDelayMs") || 1400);
 const defaultExportSpeedMs = 5200;
 const defaultPreviewSpeedMs = 3600;
 
@@ -95,8 +97,10 @@ const elements = {
   exportCurrentDate: document.querySelector("#export-current-date"),
   exportEndActivities: document.querySelector("#export-end-activities"),
   exportEndCard: document.querySelector("#export-end-card"),
-  exportEndDistance: document.querySelector("#export-end-distance"),
-  exportEndSplit: document.querySelector("#export-end-split"),
+  exportEndRunDistance: document.querySelector("#export-end-run-distance"),
+  exportEndRunCount: document.querySelector("#export-end-run-count"),
+  exportEndRideDistance: document.querySelector("#export-end-ride-distance"),
+  exportEndRideCount: document.querySelector("#export-end-ride-count"),
   exportEndSquares: document.querySelector("#export-end-squares"),
   exportEndTitle: document.querySelector("#export-end-title"),
   exportKicker: document.querySelector("#export-kicker"),
@@ -228,7 +232,9 @@ function updateExportPreviewScale() {
 function applyExportDefaults() {
   if (!isExportMode) return;
 
-  elements.speed.value = urlParams.get("speed") || String(isPreviewMode ? defaultPreviewSpeedMs : defaultExportSpeedMs);
+  const speedValue = Number(urlParams.get("speed") || (isPreviewMode ? defaultPreviewSpeedMs : defaultExportSpeedMs));
+  elements.speed.max = String(Math.max(speedValue, Number(elements.speed.max)));
+  elements.speed.value = String(speedValue);
   elements.exportTitle.textContent = urlParams.get("title") || "A year of running & cycling";
   elements.exportSubtitle.textContent =
     urlParams.get("subtitle") || "Every square unlocked, one activity at a time.";
@@ -264,6 +270,9 @@ function exposeAppControls() {
   window.routeProgressApp = {
     play,
     pause,
+    showEndCard() {
+      showExportEndCard();
+    },
     reset() {
       pause();
       state.index = -1;
@@ -320,12 +329,7 @@ function tick() {
 
       clearRouteLayers();
       showFinalOverview();
-      state.timer = window.setTimeout(() => {
-        if (!state.isPlaying) return;
-
-        showExportEndCard();
-        pause();
-      }, exportEndCardDelayMs);
+      pause();
     }, finalOverviewDelayMs);
     return;
   }
@@ -345,7 +349,10 @@ function tick() {
   };
 
   if (cameraMoved) {
-    waitForCameraMove(revealRoute);
+    waitForCameraMove(() => {
+      if (!state.isPlaying) return;
+      state.timer = window.setTimeout(revealRoute, preRevealAfterPanMs);
+    });
   } else {
     revealRoute();
   }
@@ -374,7 +381,7 @@ function showExportEndCard() {
 
 function postRevealDelayMs() {
   if (elements.showRouteTrace.checked) {
-    return traceDurationMs();
+    return traceDurationMs() + Math.max(Number(elements.speed.value) * 0.2, postTraceHoldMs);
   }
 
   return Math.max(Number(elements.speed.value) * 0.45, minimumRevealDelayMs);
@@ -404,7 +411,7 @@ function waitForCameraMove(callback) {
   };
 
   map.once("moveend", finish);
-  state.timer = window.setTimeout(finish, 2400);
+  state.timer = window.setTimeout(finish, panDurationSeconds * 1000 + 800);
 }
 
 function render() {
@@ -439,15 +446,18 @@ function updateExportEndCard() {
   const visibleRoutes = state.filteredRoutes.slice(0, Math.max(state.index + 1, 0));
   const routeSource = visibleRoutes.length > 0 ? visibleRoutes : state.filteredRoutes;
   const completedCells = visibleRoutes.length > 0 ? state.completedCells : allCellMap(state.filteredRoutes);
-  const distance = routeSource.reduce((sum, route) => sum + route.distanceKm, 0);
-  const runs = routeSource.filter((route) => route.type === "run").length;
-  const rides = routeSource.filter((route) => route.type === "ride").length;
+  const runs = routeSource.filter((route) => route.type === "run");
+  const rides = routeSource.filter((route) => route.type === "ride");
+  const runDistance = runs.reduce((sum, route) => sum + route.distanceKm, 0);
+  const rideDistance = rides.reduce((sum, route) => sum + route.distanceKm, 0);
 
   elements.exportEndTitle.textContent = urlParams.get("endTitle") || "Progress unlocked";
   elements.exportEndActivities.textContent = String(routeSource.length);
-  elements.exportEndDistance.textContent = `${distance.toFixed(1)} km`;
   elements.exportEndSquares.textContent = String(completedCells.size);
-  elements.exportEndSplit.textContent = `${runs} / ${rides}`;
+  elements.exportEndRunDistance.textContent = `${runDistance.toFixed(1)} km`;
+  elements.exportEndRunCount.textContent = `${runs.length} ${runs.length === 1 ? "run" : "runs"}`;
+  elements.exportEndRideDistance.textContent = `${rideDistance.toFixed(1)} km`;
+  elements.exportEndRideCount.textContent = `${rides.length} ${rides.length === 1 ? "ride" : "rides"}`;
 }
 
 function updateVisibleSquareCounts(completedCells) {
@@ -489,8 +499,8 @@ function moveToBounds(bounds, options = {}) {
 
   map.flyToBounds(bounds, {
     animate: true,
-    duration: 1.05,
-    easeLinearity: 0.2,
+    duration: panDurationSeconds,
+    easeLinearity: 0.1,
     maxZoom: options.maxZoom || 14,
     paddingTopLeft: padding,
     paddingBottomRight: padding

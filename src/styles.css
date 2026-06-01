@@ -357,6 +357,10 @@ button:hover {
   transition: opacity 550ms ease;
 }
 
+.export-mode .export-end-card {
+  transition: opacity 900ms ease;
+}
+
 .export-mode:not(.export-started) .export-title-card,
 .export-mode.export-ended .export-end-card {
   opacity: 1;
@@ -455,6 +459,28 @@ button:hover {
 .export-end-grid strong {
   font-size: 3.1rem;
   line-height: 1;
+}
+
+.export-end-grid em {
+  font-style: normal;
+  color: #64748b;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.export-end-type-run span {
+  color: #86efac;
+}
+
+.export-end-type-ride span {
+  color: #7dd3fc;
+}
+
+.export-end-type-run strong,
+.export-end-type-ride strong {
+  font-size: 2.5rem;
 }
 
 .export-mode .export-stats {

@@ -9,6 +9,7 @@ const outputPath = path.join(rootDir, "public", "routes.json");
 const overridesPath = path.join(rootDir, "activity-overrides.json");
 const trimMeters = Number(process.env.TRIM_METERS || 0);
 const maxLineGapMeters = Number(process.env.MAX_LINE_GAP_METERS || 2500);
+const monthFilter = process.env.MONTH || ""; // e.g. "2025-05" to include only that month
 const supportedExtensions = new Set([".fit", ".gpx"]);
 const activityOverrides = await readActivityOverrides();
 
@@ -43,6 +44,10 @@ for (const file of files) {
 
   if (!["run", "ride"].includes(type)) {
     console.warn(`Skipping ${file}: not a run or ride`);
+    continue;
+  }
+
+  if (monthFilter && !dateIsInMonth(date, monthFilter)) {
     continue;
   }
 
@@ -511,6 +516,12 @@ function haversineMeters(left, right) {
 
 function toRadians(degrees) {
   return (degrees * Math.PI) / 180;
+}
+
+function dateIsInMonth(dateString, month) {
+  const d = new Date(dateString);
+  const [year, monthNum] = month.split("-").map(Number);
+  return d.getUTCFullYear() === year && d.getUTCMonth() + 1 === monthNum;
 }
 
 function round(value, places) {
