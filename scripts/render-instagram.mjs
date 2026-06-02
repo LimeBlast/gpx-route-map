@@ -127,10 +127,44 @@ try {
     const finish = async () => {
       if (done) return;
       done = true;
+      clearInterval(statePoller);
       await client.send("Page.stopScreencast").catch(() => {});
       unsubscribe();
       resolve();
     };
+
+    const handleCompletion = (atFrame) => {
+      finishedAt = Date.now();
+      finishedAtFrame = atFrame;
+      console.log(`→ animation complete at frame ${atFrame} (${((finishedAt - startedAt) / 1000).toFixed(1)}s), hold ${holdMs}ms then end card for ${endCardMs}ms`);
+
+      // Use timers rather than frame counts — Chrome stops sending frames
+      // when the page is static, so we can't rely on frame events arriving.
+      setTimeout(async () => {
+        if (done) return;
+        console.log(`→ showing end card`);
+        await evaluate(client, "window.routeProgressApp.showEndCard()").catch(() => {});
+        // CSS fade-in triggers new frames; stop after end card hold
+        setTimeout(finish, endCardMs);
+      }, holdMs);
+    };
+
+    // Poll app state independently of frame events — Chrome stops sending
+    // screencast frames when the page is visually static, so we can't rely
+    // solely on the frame handler to detect completion.
+    const statePoller = setInterval(async () => {
+      if (done || finishedAt != null) return;
+      try {
+        const appState = await evaluate(client, "window.routeProgressApp.state()");
+        lastRouteIndex = appState.index;
+        windowRouteCount = appState.routeCount;
+        if (appState.isComplete && !appState.isPlaying) {
+          handleCompletion(frame);
+        }
+      } catch {
+        // ignore — page may be mid-navigation
+      }
+    }, 1000);
 
     const unsubscribe = client.on("Page.screencastFrame", async (params) => {
       try {
@@ -143,6 +177,7 @@ try {
 
         if (Date.now() - startedAt > maxRenderMinutes * 60 * 1000) {
           done = true;
+          clearInterval(statePoller);
           await client.send("Page.stopScreencast").catch(() => {});
           unsubscribe();
           return reject(new Error(`Timed out after ${maxRenderMinutes} minutes while rendering video`));
@@ -155,23 +190,12 @@ try {
           windowRouteCount = appState.routeCount;
 
           if (appState.isComplete && !appState.isPlaying) {
-            finishedAt = Date.now();
-            finishedAtFrame = frame;
-            console.log(`→ animation complete at frame ${frame} (${((finishedAt - startedAt) / 1000).toFixed(1)}s), hold ${holdMs}ms then end card for ${endCardMs}ms`);
-
-            // Use timers rather than frame counts — Chrome stops sending frames
-            // when the page is static, so we can't rely on frame events arriving.
-            setTimeout(async () => {
-              if (done) return;
-              console.log(`→ showing end card`);
-              await evaluate(client, "window.routeProgressApp.showEndCard()").catch(() => {});
-              // CSS fade-in triggers new frames; stop after end card hold
-              setTimeout(finish, endCardMs);
-            }, holdMs);
+            handleCompletion(frame);
           }
         }
       } catch (error) {
         done = true;
+        clearInterval(statePoller);
         await client.send("Page.stopScreencast").catch(() => {});
         unsubscribe();
         reject(error);

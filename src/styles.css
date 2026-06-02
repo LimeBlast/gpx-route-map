@@ -322,6 +322,28 @@ button:hover {
   display: none;
 }
 
+.export-mode .map-panel::before,
+.export-mode .map-panel::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 600;
+  pointer-events: none;
+}
+
+.export-mode .map-panel::before {
+  top: 0;
+  height: 260px;
+  background: linear-gradient(to bottom, #0d1520 0%, transparent 100%);
+}
+
+.export-mode .map-panel::after {
+  bottom: 0;
+  height: 560px;
+  background: linear-gradient(to top, #0d1520 0%, #0d1520 18%, rgba(13, 21, 32, 0.75) 45%, rgba(13, 21, 32, 0.3) 70%, transparent 100%);
+}
+
 .export-preview {
   width: 100vw;
   height: 100vh;
@@ -489,7 +511,7 @@ button:hover {
 
 .export-mode .export-activity-callout {
   position: absolute;
-  top: 48px;
+  top: 220px;
   right: 48px;
   z-index: 720;
   display: flex;
@@ -540,7 +562,7 @@ button:hover {
 .export-mode .export-stats {
   position: absolute;
   left: 50%;
-  bottom: 54px;
+  bottom: 380px;
   z-index: 700;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
