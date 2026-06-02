@@ -960,7 +960,7 @@ function cellColor(cell) {
 }
 
 function cellIntensity(visitCount) {
-  return Math.min(0.28 + Math.log2(visitCount + 1) * 0.18, 0.88);
+  return Math.min(0.07 + Math.log2(visitCount + 1) * 0.23, 0.82);
 }
 
 function routeCellKeys(route) {
