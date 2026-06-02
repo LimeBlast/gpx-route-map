@@ -10,9 +10,6 @@ const exportHeight = Number(urlParams.get("height") || 1920);
 
 if (isExportMode) {
   applyExportDimensions();
-}
-
-if (isExportMode) {
   document.body.classList.add("export-mode");
 }
 
@@ -513,7 +510,18 @@ function moveToBounds(bounds, options = {}) {
   state.cameraTargetKey = options.key || "";
   map.stop();
 
-  const targetZoom = map.getBoundsZoom(bounds, false, [72, 72]);
+  const padding = options.padding || (isExportMode
+    ? { topLeft: [72, 240], bottomRight: [72, 420] }
+    : { topLeft: [72, 72], bottomRight: [72, 72] });
+
+  const paddingTopLeft = Array.isArray(padding) ? padding : padding.topLeft;
+  const paddingBottomRight = Array.isArray(padding) ? padding : padding.bottomRight;
+  const zoomPadding = [
+    (paddingTopLeft[0] + paddingBottomRight[0]) / 2,
+    (paddingTopLeft[1] + paddingBottomRight[1]) / 2
+  ];
+
+  const targetZoom = map.getBoundsZoom(bounds, false, zoomPadding);
   const cappedTargetZoom = Math.min(targetZoom, options.maxZoom || 14);
 
   if (!options.force && map.getBounds().pad(-0.15).contains(bounds) && map.getZoom() >= cappedTargetZoom) {
@@ -521,17 +529,13 @@ function moveToBounds(bounds, options = {}) {
     return false;
   }
 
-  const padding = options.padding || (isExportMode
-    ? { topLeft: [72, 240], bottomRight: [72, 420] }
-    : { topLeft: [72, 72], bottomRight: [72, 72] });
-
   map.flyToBounds(bounds, {
     animate: true,
     duration: panDurationSeconds,
     easeLinearity: 0.1,
     maxZoom: options.maxZoom || 14,
-    paddingTopLeft: Array.isArray(padding) ? padding : padding.topLeft,
-    paddingBottomRight: Array.isArray(padding) ? padding : padding.bottomRight
+    paddingTopLeft,
+    paddingBottomRight
   });
 
   return true;
@@ -638,16 +642,16 @@ function drawRouteProgress(route, color, targetDistanceMeters, baseCompletedCell
   const lastSeg = visibleSegments.at(-1);
   const headLatLng = lastSeg.at(-1);
   if (headLatLng) {
-    const dotColor = traceColors[route.type] || traceColors.other;
-    const divIcon = L.divIcon({
-      className: "",
-      html: `<div class="route-head-icon" style="--head-color:${dotColor}"></div>`,
-      iconSize: [16, 16],
-      iconAnchor: [8, 8]
-    });
     if (state.routeHeadMarker) {
-      state.routeHeadMarker.setLatLng(headLatLng).setIcon(divIcon);
+      state.routeHeadMarker.setLatLng(headLatLng);
     } else {
+      const dotColor = traceColors[route.type] || traceColors.other;
+      const divIcon = L.divIcon({
+        className: "",
+        html: `<div class="route-head-icon" style="--head-color:${dotColor}"></div>`,
+        iconSize: [16, 16],
+        iconAnchor: [8, 8]
+      });
       state.routeHeadMarker = L.marker(headLatLng, { icon: divIcon, pane: "headPane" }).addTo(map);
     }
   }

@@ -523,9 +523,6 @@ button:hover {
   align-items: center;
   justify-content: center;
   width: 4rem;
-  background: rgba(15, 23, 42, 0.56);
-  border: 1px solid rgba(226, 232, 240, 0.18);
-  border-radius: 0.9rem;
   padding: 0.35rem 0.7rem;
   pointer-events: none;
 }
@@ -556,11 +553,6 @@ button:hover {
   stroke: #7dd3fc;
 }
 
-#callout-meta {
-  color: #e5edf8;
-  font-size: 1.25rem;
-  font-weight: 700;
-}
 
 .export-mode .export-stats {
   position: absolute;

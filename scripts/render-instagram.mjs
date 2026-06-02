@@ -121,6 +121,8 @@ try {
 
   await new Promise((resolve, reject) => {
     let done = false;
+    let completionTriggered = false;
+    let statePoller; // hoisted so finish() can always clearInterval safely
     const holdMs = Math.round((finalOverviewHoldFrames / fps) * 1000);
     const endCardMs = Math.round((endHoldFrames / fps) * 1000);
 
@@ -134,6 +136,8 @@ try {
     };
 
     const handleCompletion = (atFrame) => {
+      if (completionTriggered) return;
+      completionTriggered = true;
       finishedAt = Date.now();
       finishedAtFrame = atFrame;
       console.log(`→ animation complete at frame ${atFrame} (${((finishedAt - startedAt) / 1000).toFixed(1)}s), hold ${holdMs}ms then end card for ${endCardMs}ms`);
@@ -152,7 +156,7 @@ try {
     // Poll app state independently of frame events — Chrome stops sending
     // screencast frames when the page is visually static, so we can't rely
     // solely on the frame handler to detect completion.
-    const statePoller = setInterval(async () => {
+    statePoller = setInterval(async () => {
       if (done || finishedAt != null) return;
       try {
         const appState = await evaluate(client, "window.routeProgressApp.state()");
@@ -178,6 +182,7 @@ try {
         if (Date.now() - startedAt > maxRenderMinutes * 60 * 1000) {
           done = true;
           clearInterval(statePoller);
+          clearInterval(heartbeat);
           await client.send("Page.stopScreencast").catch(() => {});
           unsubscribe();
           return reject(new Error(`Timed out after ${maxRenderMinutes} minutes while rendering video`));
