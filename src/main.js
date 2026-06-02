@@ -60,7 +60,8 @@ const state = {
   routeAnimationFrame: null,
   routeAnimationToken: 0,
   timer: null,
-  routeLayers: []
+  routeLayers: [],
+  routeHeadMarker: null
 };
 
 const map = L.map("map", {
@@ -82,6 +83,10 @@ map.getPane("gridPane").style.pointerEvents = "none";
 
 map.createPane("routePane");
 map.getPane("routePane").style.zIndex = 430;
+
+map.createPane("headPane");
+map.getPane("headPane").style.zIndex = 440;
+map.getPane("headPane").style.pointerEvents = "none";
 
 const gridRenderer = isExportMode
   ? L.canvas({ pane: "gridPane", padding: 1 })
@@ -516,15 +521,17 @@ function moveToBounds(bounds, options = {}) {
     return false;
   }
 
-  const padding = options.padding || [72, 72];
+  const padding = options.padding || (isExportMode
+    ? { topLeft: [72, 240], bottomRight: [72, 420] }
+    : { topLeft: [72, 72], bottomRight: [72, 72] });
 
   map.flyToBounds(bounds, {
     animate: true,
     duration: panDurationSeconds,
     easeLinearity: 0.1,
     maxZoom: options.maxZoom || 14,
-    paddingTopLeft: padding,
-    paddingBottomRight: padding
+    paddingTopLeft: Array.isArray(padding) ? padding : padding.topLeft,
+    paddingBottomRight: Array.isArray(padding) ? padding : padding.bottomRight
   });
 
   return true;
@@ -554,6 +561,7 @@ function clearRouteLayers() {
   state.routeAnimationToken += 1;
   routeLayerGroup.clearLayers();
   state.routeLayers = [];
+  removeRouteHeadMarker();
 }
 
 function renderAnimatedRouteTrace(route, baseCompletedCells = state.completedCells) {
@@ -621,7 +629,28 @@ function drawRouteProgress(route, color, targetDistanceMeters, baseCompletedCell
       targetDistanceMeters / 1000
   );
 
-  if (visibleSegments.length === 0) return;
+  if (visibleSegments.length === 0) {
+    removeRouteHeadMarker();
+    return;
+  }
+
+  // Place / move the sport icon at the leading tip of the route trace
+  const lastSeg = visibleSegments.at(-1);
+  const headLatLng = lastSeg.at(-1);
+  if (headLatLng) {
+    const dotColor = traceColors[route.type] || traceColors.other;
+    const divIcon = L.divIcon({
+      className: "",
+      html: `<div class="route-head-icon" style="--head-color:${dotColor}"></div>`,
+      iconSize: [16, 16],
+      iconAnchor: [8, 8]
+    });
+    if (state.routeHeadMarker) {
+      state.routeHeadMarker.setLatLng(headLatLng).setIcon(divIcon);
+    } else {
+      state.routeHeadMarker = L.marker(headLatLng, { icon: divIcon, pane: "headPane" }).addTo(map);
+    }
+  }
 
   const layer = L.polyline(visibleSegments, {
     color,
@@ -634,6 +663,13 @@ function drawRouteProgress(route, color, targetDistanceMeters, baseCompletedCell
 
   layer.bindPopup(popupFor(route));
   state.routeLayers = [layer];
+}
+
+function removeRouteHeadMarker() {
+  if (state.routeHeadMarker) {
+    state.routeHeadMarker.remove();
+    state.routeHeadMarker = null;
+  }
 }
 
 function traceDurationMs() {

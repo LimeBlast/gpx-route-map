@@ -250,6 +250,15 @@ button:hover {
   filter: grayscale(1) saturate(0.12) contrast(0.88) brightness(1.08);
 }
 
+.route-head-icon {
+  width: 16px;
+  height: 16px;
+  background: var(--head-color, #fff);
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  border-radius: 50%;
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.5);
+}
+
 .grid-cell {
   transition:
     fill 180ms ease,
