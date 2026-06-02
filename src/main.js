@@ -1083,13 +1083,12 @@ const activityIcons = {
 };
 
 function showActivityCallout(route) {
-  elements.calloutIcon.className = `callout-icon ${route.type}`;
+  elements.calloutIcon.className = `callout-icon ${route.type} visible`;
   elements.calloutIcon.innerHTML = activityIcons[route.type] || "";
-  elements.activityCallout.classList.add("visible");
 }
 
 function hideActivityCallout() {
-  elements.activityCallout.classList.remove("visible");
+  elements.calloutIcon.classList.remove("visible");
 }
 
 boot();

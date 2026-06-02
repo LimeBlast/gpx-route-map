@@ -519,27 +519,15 @@ button:hover {
 }
 
 .export-mode .export-activity-callout {
-  position: absolute;
-  top: 220px;
-  right: 48px;
-  z-index: 720;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 96px;
-  height: 96px;
-  background: rgba(8, 17, 31, 0.88);
-  border: 1px solid rgba(226, 232, 240, 0.2);
-  border-radius: 50%;
-  box-shadow: 0 8px 40px rgba(15, 23, 42, 0.5);
-  backdrop-filter: blur(16px);
-  opacity: 0;
+  width: 4rem;
+  background: rgba(15, 23, 42, 0.56);
+  border: 1px solid rgba(226, 232, 240, 0.18);
+  border-radius: 0.9rem;
+  padding: 0.35rem 0.7rem;
   pointer-events: none;
-  transition: opacity 500ms ease;
-}
-
-.export-mode .export-activity-callout.visible {
-  opacity: 1;
 }
 
 .callout-icon {
@@ -547,11 +535,17 @@ button:hover {
   display: flex;
   align-items: center;
   justify-content: center;
+  opacity: 0;
+  transition: opacity 500ms ease;
+}
+
+.callout-icon.visible {
+  opacity: 1;
 }
 
 .callout-icon svg {
-  width: 3.2rem;
-  height: 3.2rem;
+  width: 2.6rem;
+  height: 2.6rem;
 }
 
 .callout-icon.run svg {
@@ -574,7 +568,7 @@ button:hover {
   bottom: 380px;
   z-index: 700;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: auto repeat(3, 1fr);
   gap: 0.8rem;
   width: calc(100% - 96px);
   padding: 1.25rem;
@@ -598,6 +592,7 @@ button:hover {
   padding: 0.35rem 0.45rem;
   border-radius: 0.9rem;
   background: rgba(15, 23, 42, 0.56);
+  border: 1px solid rgba(226, 232, 240, 0.18);
 }
 
 .export-stats span {
