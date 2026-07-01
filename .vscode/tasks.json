@@ -1,0 +1,77 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Render monthly reel",
+      "detail": "Renders last month's activities to exports/monthly-YYYY-MM.mp4",
+      "type": "npm",
+      "script": "render:monthly",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Dev server",
+      "detail": "Starts Vite dev server with browser preview at localhost (Story/Reel sidebar for export preview)",
+      "type": "npm",
+      "script": "dev",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Build routes.json",
+      "detail": "Parses gpx/ .fit and .gpx files into public/routes.json only",
+      "type": "npm",
+      "script": "build:routes",
+      "problemMatcher": []
+    },
+    {
+      "label": "Build app",
+      "detail": "Vite build only, no route parsing",
+      "type": "npm",
+      "script": "build:app",
+      "problemMatcher": []
+    },
+    {
+      "label": "Build all",
+      "detail": "build:routes + build:app",
+      "type": "npm",
+      "script": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Render instagram (default)",
+      "detail": "Renders full export using current env vars, no month filter",
+      "type": "npm",
+      "script": "render:instagram",
+      "problemMatcher": []
+    },
+    {
+      "label": "Render draft (15fps preview)",
+      "detail": "Quick low-fps preview render to exports/draft-route-map.mp4",
+      "type": "npm",
+      "script": "render:draft",
+      "problemMatcher": []
+    },
+    {
+      "label": "Render final",
+      "detail": "Full-quality render to exports/instagram-route-map.mp4",
+      "type": "npm",
+      "script": "render:final",
+      "problemMatcher": []
+    },
+    {
+      "label": "Render feed (4:5)",
+      "detail": "1080x1350 export to exports/instagram-feed-4x5.mp4",
+      "type": "npm",
+      "script": "render:feed",
+      "problemMatcher": []
+    },
+    {
+      "label": "Render square",
+      "detail": "1080x1080 export to exports/instagram-square.mp4",
+      "type": "npm",
+      "script": "render:square",
+      "problemMatcher": []
+    }
+  ]
+}
