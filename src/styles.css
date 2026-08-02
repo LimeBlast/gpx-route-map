@@ -355,3 +355,96 @@ body.export-ended .export-stats {
 .export-stats #export-location {
   font-size: 2rem;
 }
+
+/* Instagram chrome mockup — dev preview only, so you can see what the
+   app's own UI covers up. `dev-chrome` is set from import.meta.env.DEV. */
+.ig-chrome {
+  display: none;
+}
+
+body.dev-chrome .ig-chrome {
+  display: block;
+  position: absolute;
+  inset: 0;
+  z-index: 900;
+  color: #fff;
+  pointer-events: none;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.ig-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 40px 56px 0;
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.ig-status-right {
+  letter-spacing: 0.1em;
+}
+
+.ig-rail {
+  position: absolute;
+  right: 34px;
+  bottom: 420px;
+  display: grid;
+  justify-items: center;
+  gap: 42px;
+}
+
+.ig-rail-item {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.ig-rail-item svg {
+  width: 62px;
+  height: 62px;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.55));
+}
+
+.ig-rail-item em {
+  font-style: normal;
+}
+
+.ig-rail-dots {
+  font-size: 2.4rem;
+  letter-spacing: 0.1em;
+}
+
+.ig-footer {
+  position: absolute;
+  left: 44px;
+  right: 160px;
+  bottom: 190px;
+  display: grid;
+  gap: 18px;
+}
+
+.ig-author {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  font-size: 1.9rem;
+}
+
+.ig-avatar {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #64748b, #334155);
+  border: 2px solid rgba(255, 255, 255, 0.7);
+}
+
+.ig-caption {
+  margin: 0;
+  font-size: 1.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

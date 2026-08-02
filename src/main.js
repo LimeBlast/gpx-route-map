@@ -118,8 +118,12 @@ async function boot() {
     fitAllRoutes();
     exposeAppControls();
 
-    // ponytail: dev preview autoplays; the renderer drives play() itself
-    if (import.meta.env.DEV) window.setTimeout(play, 150);
+    // ponytail: dev preview autoplays and shows the Instagram chrome mockup;
+    // the renderer drives play() itself and captures a clean frame
+    if (import.meta.env.DEV) {
+      document.body.classList.add("dev-chrome");
+      window.setTimeout(play, 150);
+    }
   } catch (error) {
     console.error(error);
     elements.emptyState.hidden = false;
