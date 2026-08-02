@@ -35,6 +35,7 @@ const speedMs = Number(urlParams.get("speed") || 5200);
 const minimumSwimDurationMs = 1600;
 const maximumSwimDurationMs = 3200;
 const swimFadeMs = 450;
+const devEndCardDelayMs = 2000; // mirrors the renderer's FINAL_HOLD_SECONDS
 
 const state = {
   routes: [],
@@ -195,10 +196,7 @@ function exposeAppControls() {
   window.routeProgressApp = {
     play,
     pause,
-    showEndCard() {
-      updateExportEndCard();
-      document.body.classList.add("export-ended");
-    },
+    showEndCard,
     reset() {
       pause();
       hideSwimCard();
@@ -255,6 +253,10 @@ function tick() {
       clearRouteLayers();
       showFinalOverview();
       pause();
+
+      // The renderer calls showEndCard() itself; in the preview nothing would
+      // otherwise drive it, so the final card never appeared
+      if (import.meta.env.DEV) window.setTimeout(showEndCard, devEndCardDelayMs);
     }, finalOverviewDelayMs);
     return;
   }
@@ -389,6 +391,11 @@ function revealSwim(route, done) {
   state.routeAnimationFrame = requestAnimationFrame((timestamp) => {
     state.timer = window.setTimeout(() => draw(timestamp, performance.now()), swimFadeMs);
   });
+}
+
+function showEndCard() {
+  updateExportEndCard();
+  document.body.classList.add("export-ended");
 }
 
 function showFinalOverview() {

@@ -93,4 +93,4 @@ During playback a swim takes over the frame (`#swim-card`) in date order rather 
 
 ### Browser preview
 
-`npm run dev` serves the same reel the renderer captures, scaled to fit the window, autoplaying (autoplay is gated on `import.meta.env.DEV`). Month label and title card text come from the loaded `routes.json` — no URL params needed. There are no interactive controls; the browser view exists only to see what the video will look like.
+`npm run dev` serves the same reel the renderer captures, scaled to fit the window, autoplaying (autoplay is gated on `import.meta.env.DEV`). Month label and title card text come from the loaded `routes.json` — no URL params needed. There are no interactive controls; the browser view exists only to see what the video will look like. Playback runs the full sequence including the final stats card — the renderer calls `showEndCard()` itself, so in dev a timer stands in for it.

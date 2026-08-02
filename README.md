@@ -118,7 +118,8 @@ npm run dev
 ```
 
 Open the local URL printed by Vite. The page renders exactly what the video will
-show — a 1080×1920 reel frame, scaled to fit the window — and plays automatically.
+show — a 1080×1920 reel frame, scaled to fit the window — and plays automatically
+through to the final stats card.
 
 ## Building Routes Only
 
