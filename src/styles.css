@@ -53,12 +53,8 @@ code {
   background: #d1d5db;
 }
 
-.leaflet-control-container {
+.maplibregl-control-container {
   display: none;
-}
-
-.greyscale-tiles {
-  filter: grayscale(1) saturate(0.12) contrast(0.88) brightness(1.08);
 }
 
 .route-head-icon {
@@ -68,14 +64,6 @@ code {
   border: 2px solid rgba(255, 255, 255, 0.6);
   border-radius: 50%;
   box-shadow: 0 0 6px rgba(0, 0, 0, 0.5);
-}
-
-.grid-cell {
-  transition:
-    fill 180ms ease,
-    fill-opacity 180ms ease,
-    stroke 180ms ease,
-    stroke-opacity 180ms ease;
 }
 
 /* Top and bottom vignettes keep overlay text legible over the basemap */

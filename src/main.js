@@ -1,5 +1,7 @@
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
+import { LngLatBounds, Map as MapLibreMap, Marker } from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
+import { layersWithCustomTheme, namedTheme } from "protomaps-themes-base";
+import { mergeBounds } from "../scripts/lib/bounds.mjs";
 import "./styles.css";
 
 const urlParams = new URLSearchParams(window.location.search);
@@ -37,15 +39,14 @@ const maximumSwimDurationMs = 3200;
 const swimFadeMs = 450;
 const devEndCardDelayMs = 2000; // mirrors the renderer's FINAL_HOLD_SECONDS
 const tileWaitTimeoutMs = 8000;
-const tileSettleGraceMs = 150; // let Leaflet request tiles for the new view first
-const maxPrefetchTiles = 48; // OSM's tile policy frowns on bulk downloading
+const tileSettleGraceMs = 150; // let MapLibre start work for the new view first
+const basemapTheme = namedTheme("grayscale");
 
 const state = {
   routes: [],
   gridCells: new Map(),
-  cellLayers: new Map(),
   completedCells: new Map(),
-  gridRefreshFrame: null,
+  gridSignature: "",
   cameraTargetKey: "",
   index: -1,
   isPlaying: false,
@@ -53,49 +54,57 @@ const state = {
   routeAnimationToken: 0,
   timer: null,
   routeHeadMarker: null,
-  swimMetresTotal: 0,
-  tilesLoading: false,
-  prefetched: new Set()
+  swimMetresTotal: 0
 };
 
 updatePreviewScale();
 
-const map = L.map("map", {
-  zoomControl: false,
-  scrollWheelZoom: false
-}).setView([54.5, -3], 6);
-
-// The renderer passes its own cache-backed tile route; the browser hits OSM directly
-const tileUrlTemplate = urlParams.get("tiles") || "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
-const tileSubdomains = ["a", "b", "c"];
-const tileLayer = L.tileLayer(tileUrlTemplate, {
-  maxZoom: 19,
-  className: "greyscale-tiles",
-  keepBuffer: 4,
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-}).addTo(map);
-
-tileLayer.on("loading", () => {
-  state.tilesLoading = true;
-});
-tileLayer.on("load", () => {
-  state.tilesLoading = false;
+const map = new MapLibreMap({
+  container: "map",
+  style: await basemapStyle(),
+  center: [-3, 54.5],
+  zoom: 5,
+  interactive: false,
+  attributionControl: false,
+  fadeDuration: 0, // labels must not cross-fade — every frame is captured
+  maxZoom: 16
 });
 
-map.createPane("gridPane");
-map.getPane("gridPane").style.zIndex = 410;
-map.getPane("gridPane").style.pointerEvents = "none";
+// One basemap extract per area of activity, each contributing its own copy of
+// the theme's layers. Tiles outside an extract simply draw nothing.
+async function basemapStyle() {
+  const manifest = await (await fetch("/basemap/basemap.json")).json();
+  const sources = {};
+  const layers = [];
 
-map.createPane("routePane");
-map.getPane("routePane").style.zIndex = 430;
+  manifest.extracts.forEach((extract, index) => {
+    const sourceId = `basemap-${index}`;
 
-map.createPane("headPane");
-map.getPane("headPane").style.zIndex = 440;
-map.getPane("headPane").style.pointerEvents = "none";
+    sources[sourceId] = {
+      type: "vector",
+      tiles: [`/basemap/tiles/${extract.name}/{z}/{x}/{y}.mvt`],
+      minzoom: 0,
+      maxzoom: manifest.maxZoom ?? 14,
+      // Bounds keep MapLibre from asking each extract for tiles it cannot have
+      bounds: [extract.bounds.west, extract.bounds.south, extract.bounds.east, extract.bounds.north],
+      attribution: "© OpenStreetMap contributors"
+    };
 
-const gridRenderer = L.canvas({ pane: "gridPane", padding: 1 });
-const gridLayerGroup = L.layerGroup().addTo(map);
-const routeLayerGroup = L.layerGroup().addTo(map);
+    for (const layer of layersWithCustomTheme(sourceId, basemapTheme, "en")) {
+      // A single background layer is enough, and ids must be unique per source
+      if (layer.id === "background" && index > 0) continue;
+
+      layers.push({ ...layer, id: `${layer.id}--${index}` });
+    }
+  });
+
+  return {
+    version: 8,
+    glyphs: "/basemap/fonts/{fontstack}/{range}.pbf",
+    sources,
+    layers
+  };
+}
 
 const elements = {
   emptyState: document.querySelector("#empty-state"),
@@ -155,7 +164,10 @@ async function boot() {
       0
     );
 
-    await waitForMapLayout();
+    window.__bootStage = "waiting for map";
+    await waitForMapReady();
+    window.__bootStage = "map ready";
+    addOverlayLayers();
     bindMapEvents();
     applyCardText();
     elements.emptyState.hidden = state.routes.length > 0;
@@ -180,14 +192,66 @@ async function boot() {
 function bindMapEvents() {
   window.addEventListener("resize", () => {
     updatePreviewScale();
-    map.invalidateSize();
-    refreshGridStyles();
+    map.resize();
+  });
+}
+
+// The grid and the route trace are GeoJSON sources restyled per frame, in place
+// of Leaflet's one-layer-per-cell rectangles
+function addOverlayLayers() {
+  map.addSource("grid", { type: "geojson", data: emptyCollection() });
+  map.addSource("route", { type: "geojson", data: emptyCollection() });
+
+  map.addLayer({
+    id: "grid-fill",
+    type: "fill",
+    source: "grid",
+    paint: {
+      "fill-color": ["get", "color"],
+      "fill-opacity": ["get", "fillOpacity"],
+      "fill-antialias": false
+    }
   });
 
-  map.on("movestart move zoomstart zoom zoomend moveend", refreshGridStyles);
-  map.on("zoomend moveend", () => {
-    window.setTimeout(refreshGridStyles, 60);
+  map.addLayer({
+    id: "grid-outline",
+    type: "line",
+    source: "grid",
+    paint: {
+      "line-color": ["get", "color"],
+      "line-opacity": ["get", "lineOpacity"],
+      "line-width": ["get", "weight"]
+    }
   });
+
+  map.addLayer({
+    id: "route-line",
+    type: "line",
+    source: "route",
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: { "line-color": ["get", "color"], "line-width": 4 }
+  });
+}
+
+function emptyCollection() {
+  return { type: "FeatureCollection", features: [] };
+}
+
+// The load event fires while routes.json is still being crunched, so record it
+// rather than relying on attaching a listener in time
+// Exposed in production too: when a headless render stalls, this is the only
+// way to see what the map is doing
+window.__map = map;
+window.__state = state;
+map.on("error", (event) => console.error("maplibre:", event.error?.message || event.error));
+
+let mapHasLoaded = false;
+map.once("load", () => {
+  mapHasLoaded = true;
+});
+
+function waitForMapReady() {
+  return mapHasLoaded ? Promise.resolve() : new Promise((resolve) => map.once("load", resolve));
 }
 
 function updatePreviewScale() {
@@ -300,8 +364,6 @@ function tick() {
 
     state.timer = window.setTimeout(tick, followUpDelayMs);
   };
-
-  prefetchRouteTiles(state.routes[nextIndex + 1]);
 
   if (cameraMoved) {
     waitForCameraMove(() => {
@@ -422,7 +484,7 @@ function showEndCard() {
 function showFinalOverview() {
   const bounds = densestClusterBounds();
 
-  if (bounds.isValid()) {
+  if (boundsAreValid(bounds)) {
     moveToBounds(bounds, { key: "final-overview", maxZoom: 12, force: true, padding: [96, 96] });
   }
 }
@@ -442,17 +504,6 @@ function formatDuration(seconds) {
   return `${Math.floor(seconds / 60)}:${String(Math.round(seconds % 60)).padStart(2, "0")}`;
 }
 
-function waitForMapLayout() {
-  return new Promise((resolve) => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        map.invalidateSize();
-        resolve();
-      });
-    });
-  });
-}
-
 function waitForCameraMove(callback) {
   let isDone = false;
 
@@ -469,67 +520,29 @@ function waitForCameraMove(callback) {
   state.timer = window.setTimeout(finish, panDurationSeconds * 1000 + 800);
 }
 
-// Leaflet only issues requests for a new view a beat after moveend, so the
-// "loading" flag is still false right after a pan — waiting on the load event
-// alone returned immediately and revealed routes onto a blank map. Poll the
-// layer's own tiles instead.
-function tilesSettled() {
-  const tiles = Object.values(tileLayer._tiles || {});
-  return tiles.length > 0 && tiles.every((tile) => tile.loaded);
+function cameraPadding(padding) {
+  return Array.isArray(padding)
+    ? { top: padding[0], bottom: padding[0], left: padding[1], right: padding[1] }
+    : padding;
 }
 
+// Tiles come off local disk, but MapLibre still parses and lays out labels
+// asynchronously, so wait for the map to go quiet before revealing a route.
 function waitForTiles(callback) {
   const startedAt = performance.now();
 
   const poll = () => {
     if (!state.isPlaying) return;
 
-    const settled = tilesSettled() && !state.tilesLoading;
-
-    if (settled || performance.now() - startedAt > tileWaitTimeoutMs) {
+    if (map.loaded() || performance.now() - startedAt > tileWaitTimeoutMs) {
       callback();
       return;
     }
 
-    state.timer = window.setTimeout(poll, 100);
+    state.timer = window.setTimeout(poll, 60);
   };
 
   state.timer = window.setTimeout(poll, tileSettleGraceMs);
-}
-
-// Warm the browser cache for where the camera is heading next, so a jump
-// between distant routes doesn't land on empty tiles
-function prefetchRouteTiles(route) {
-  if (!route || route.type === "swim" || state.prefetched.has(route.id)) return;
-
-  state.prefetched.add(route.id);
-  const bounds = cellKeysBounds(route.cells);
-
-  if (!bounds.isValid()) return;
-
-  const zoom = Math.min(map.getBoundsZoom(bounds, false, [180, 330]), 14);
-  const northWest = tileCoords(bounds.getNorthWest(), zoom);
-  const southEast = tileCoords(bounds.getSouthEast(), zoom);
-  let requested = 0;
-
-  for (let x = northWest.x - 1; x <= southEast.x + 1; x += 1) {
-    for (let y = northWest.y - 1; y <= southEast.y + 1; y += 1) {
-      if (requested >= maxPrefetchTiles) return;
-
-      requested += 1;
-      const image = new Image();
-      image.src = tileUrlTemplate
-        .replace("{s}", tileSubdomains[requested % tileSubdomains.length])
-        .replace("{z}", String(zoom))
-        .replace("{x}", String(x))
-        .replace("{y}", String(y));
-    }
-  }
-}
-
-function tileCoords(latLng, zoom) {
-  const point = map.project(latLng, zoom).divideBy(256).floor();
-  return { x: point.x, y: point.y };
 }
 
 function render() {
@@ -604,7 +617,7 @@ function focusPlaybackView(targetIndex = state.index) {
 
   const latestBounds = cellKeysBounds(latestRoute.cells);
 
-  if (!latestBounds.isValid()) return false;
+  if (!boundsAreValid(latestBounds)) return false;
 
   return moveToBounds(latestBounds, { key: `route:${latestRoute.id}`, maxZoom: 14 });
 }
@@ -615,32 +628,47 @@ function moveToBounds(bounds, options = {}) {
   state.cameraTargetKey = options.key || "";
   map.stop();
 
-  const padding = options.padding || { topLeft: [72, 240], bottomRight: [72, 420] };
-  const paddingTopLeft = Array.isArray(padding) ? padding : padding.topLeft;
-  const paddingBottomRight = Array.isArray(padding) ? padding : padding.bottomRight;
-  const zoomPadding = [
-    (paddingTopLeft[0] + paddingBottomRight[0]) / 2,
-    (paddingTopLeft[1] + paddingBottomRight[1]) / 2
-  ];
+  const padding = cameraPadding(options.padding || { top: 240, bottom: 420, left: 72, right: 72 });
+  const maxZoom = options.maxZoom || 14;
+  const lngLatBounds = toLngLatBounds(bounds);
+  const camera = map.cameraForBounds(lngLatBounds, { padding, maxZoom });
 
-  const targetZoom = map.getBoundsZoom(bounds, false, zoomPadding);
-  const cappedTargetZoom = Math.min(targetZoom, options.maxZoom || 14);
-
-  if (!options.force && map.getBounds().pad(-0.15).contains(bounds) && map.getZoom() >= cappedTargetZoom) {
-    refreshGridStyles();
+  // Already framed comfortably? Stay put rather than nudge the camera
+  if (!options.force && camera && boundsWithinView(bounds) && map.getZoom() >= Math.min(camera.zoom, maxZoom)) {
     return false;
   }
 
-  map.flyToBounds(bounds, {
-    animate: true,
-    duration: panDurationSeconds,
-    easeLinearity: 0.1,
-    maxZoom: options.maxZoom || 14,
-    paddingTopLeft,
-    paddingBottomRight
+  map.fitBounds(lngLatBounds, {
+    padding,
+    maxZoom,
+    duration: panDurationSeconds * 1000,
+    essential: true
   });
 
   return true;
+}
+
+// Leaflet had bounds.pad(); this is the same idea — is the target well inside
+// what is already on screen?
+function boundsWithinView(bounds) {
+  const view = map.getBounds();
+  const insetX = (view.getEast() - view.getWest()) * 0.15;
+  const insetY = (view.getNorth() - view.getSouth()) * 0.15;
+
+  return (
+    bounds.west >= view.getWest() + insetX &&
+    bounds.east <= view.getEast() - insetX &&
+    bounds.south >= view.getSouth() + insetY &&
+    bounds.north <= view.getNorth() - insetY
+  );
+}
+
+function toLngLatBounds(bounds) {
+  return new LngLatBounds([bounds.west, bounds.south], [bounds.east, bounds.north]);
+}
+
+function boundsAreValid(bounds) {
+  return Boolean(bounds) && Number.isFinite(bounds.west) && Number.isFinite(bounds.south);
 }
 
 function clearRouteLayers() {
@@ -650,7 +678,7 @@ function clearRouteLayers() {
 
   state.routeAnimationFrame = null;
   state.routeAnimationToken += 1;
-  routeLayerGroup.clearLayers();
+  map.getSource("route")?.setData(emptyCollection());
   removeRouteHeadMarker();
 }
 
@@ -681,8 +709,6 @@ function renderAnimatedRouteTrace(route, baseCompletedCells = state.completedCel
 }
 
 function drawRouteProgress(route, color, targetDistanceMeters, baseCompletedCells) {
-  routeLayerGroup.clearLayers();
-
   let remainingDistance = targetDistanceMeters;
   const visibleSegments = [];
 
@@ -717,36 +743,36 @@ function drawRouteProgress(route, color, targetDistanceMeters, baseCompletedCell
   updateVisibleDistance(landDistanceKm(state.routes.slice(0, state.index)) + targetDistanceMeters / 1000);
 
   if (visibleSegments.length === 0) {
+    map.getSource("route")?.setData(emptyCollection());
     removeRouteHeadMarker();
     return;
   }
 
+  map.getSource("route")?.setData({
+    type: "FeatureCollection",
+    features: visibleSegments.map((segment) => ({
+      type: "Feature",
+      properties: { color },
+      // Route segments are stored [lat, lng]; GeoJSON wants the reverse
+      geometry: { type: "LineString", coordinates: segment.map(([lat, lng]) => [lng, lat]) }
+    }))
+  });
+
   // Place / move the sport icon at the leading tip of the route trace
-  const lastSeg = visibleSegments.at(-1);
-  const headLatLng = lastSeg.at(-1);
+  const headLatLng = visibleSegments.at(-1).at(-1);
+
   if (headLatLng) {
+    const position = [headLatLng[1], headLatLng[0]];
+
     if (state.routeHeadMarker) {
-      state.routeHeadMarker.setLatLng(headLatLng);
+      state.routeHeadMarker.setLngLat(position);
     } else {
-      const dotColor = traceColors[route.type] || traceColors.other;
-      const divIcon = L.divIcon({
-        className: "",
-        html: `<div class="route-head-icon" style="--head-color:${dotColor}"></div>`,
-        iconSize: [16, 16],
-        iconAnchor: [8, 8]
-      });
-      state.routeHeadMarker = L.marker(headLatLng, { icon: divIcon, pane: "headPane" }).addTo(map);
+      const element = document.createElement("div");
+      element.className = "route-head-icon";
+      element.style.setProperty("--head-color", traceColors[route.type] || traceColors.other);
+      state.routeHeadMarker = new Marker({ element }).setLngLat(position).addTo(map);
     }
   }
-
-  L.polyline(visibleSegments, {
-    color,
-    opacity: 1,
-    pane: "routePane",
-    weight: 4,
-    lineCap: "round",
-    lineJoin: "round"
-  }).addTo(routeLayerGroup);
 }
 
 function removeRouteHeadMarker() {
@@ -808,21 +834,15 @@ function latLngDistanceMeters(left, right) {
 function fitAllRoutes() {
   const bounds = cellKeysBounds(Array.from(state.gridCells.keys()));
 
-  if (bounds.isValid()) {
-    map.invalidateSize();
-    map.fitBounds(bounds, { padding: [40, 40] });
+  if (boundsAreValid(bounds)) {
+    map.fitBounds(toLngLatBounds(bounds), { padding: 40, duration: 0, maxZoom: 14 });
   }
 }
 
 function cellKeysBounds(cellKeys) {
-  const bounds = L.latLngBounds([]);
+  if (cellKeys.length === 0) return null;
 
-  cellKeys.forEach((key) => {
-    const cell = state.gridCells.get(key) || parseCellKey(key);
-    bounds.extend(cellBounds(cell));
-  });
-
-  return bounds;
+  return mergeBounds(cellKeys.map((key) => cellBounds(state.gridCells.get(key) || parseCellKey(key))));
 }
 
 function densestClusterBounds() {
@@ -835,6 +855,7 @@ function densestClusterBounds() {
   if (cells.length === 0) {
     return cellKeysBounds(Array.from(state.gridCells.keys()));
   }
+
 
   let bestCell = cells[0];
   let bestScore = -Infinity;
@@ -865,62 +886,39 @@ function densestClusterBounds() {
 }
 
 function buildGrid() {
-  gridLayerGroup.clearLayers();
   state.gridCells = allCellMap(state.routes);
-  state.cellLayers = new Map();
+  state.gridSignature = "";
+}
+
+// One GeoJSON feature per cell, styled by its own properties. Rebuilding the
+// collection is only worth it when the completed set actually changed — the
+// trace animation calls this on every frame.
+function renderGrid(completedCells) {
+  const signature = `${completedCells.size}:${[...completedCells.values()].reduce((sum, cell) => sum + cell.visitCount, 0)}`;
+
+  if (signature === state.gridSignature) return;
+
+  state.gridSignature = signature;
+  const features = [];
 
   for (const [key, cell] of state.gridCells) {
-    const layer = L.rectangle(cellBounds(cell), {
-      className: "grid-cell",
-      renderer: gridRenderer,
-      pane: "gridPane",
-      color: "#cbd5e1",
-      fillColor: "#94a3b8",
-      fillOpacity: 0.12,
-      opacity: 0.35,
-      weight: 1,
-      interactive: false
-    }).addTo(gridLayerGroup);
-
-    state.cellLayers.set(key, layer);
-  }
-}
-
-function renderGrid(completedCells) {
-  for (const [key, layer] of state.cellLayers) {
     const completedCell = completedCells.get(key);
+    const color = completedCell ? cellColor(completedCell) : "#94a3b8";
+    const intensity = completedCell ? cellIntensity(completedCell.visitCount) : 0.12;
 
-    if (completedCell) {
-      const color = cellColor(completedCell);
-      const intensity = cellIntensity(completedCell.visitCount);
-
-      layer.setStyle({
+    features.push({
+      type: "Feature",
+      properties: {
         color,
-        fillColor: color,
         fillOpacity: intensity,
-        opacity: Math.min(intensity + 0.24, 0.95),
-        weight: completedCell.visitCount > 1 ? 1.5 : 1.1
-      });
-    } else {
-      layer.setStyle({
-        color: "#cbd5e1",
-        fillColor: "#94a3b8",
-        fillOpacity: 0.12,
-        opacity: 0.35,
-        weight: 1
-      });
-    }
+        lineOpacity: completedCell ? Math.min(intensity + 0.24, 0.95) : 0.35,
+        weight: completedCell?.visitCount > 1 ? 1.5 : 1.1
+      },
+      geometry: { type: "Polygon", coordinates: [cellRing(cell)] }
+    });
   }
-}
 
-function refreshGridStyles() {
-  if (!state.completedCells) return;
-  if (state.gridRefreshFrame) return;
-
-  state.gridRefreshFrame = requestAnimationFrame(() => {
-    state.gridRefreshFrame = null;
-    renderGrid(state.completedCells);
-  });
+  map.getSource("grid")?.setData({ type: "FeatureCollection", features });
 }
 
 function allCellMap(routes) {
@@ -1069,8 +1067,26 @@ function interpolatedPoints(start, end, maxStepMeters) {
   return points;
 }
 
+// Spherical Mercator metres — the same projection Leaflet's EPSG3857 CRS used,
+// so cell keys are unchanged
+const earthRadiusMeters = 6378137;
+
+function projectMeters(latitude, longitude) {
+  return {
+    x: earthRadiusMeters * toRadians(longitude),
+    y: earthRadiusMeters * Math.log(Math.tan(Math.PI / 4 + toRadians(latitude) / 2))
+  };
+}
+
+function unprojectMeters(x, y) {
+  return {
+    longitude: (x / earthRadiusMeters) * (180 / Math.PI),
+    latitude: (2 * Math.atan(Math.exp(y / earthRadiusMeters)) - Math.PI / 2) * (180 / Math.PI)
+  };
+}
+
 function cellKeyForPoint(point) {
-  const projected = map.options.crs.project(L.latLng(point.latitude, point.longitude));
+  const projected = projectMeters(point.latitude, point.longitude);
   const x = Math.floor(projected.x / gridCellMeters);
   const y = Math.floor(projected.y / gridCellMeters);
 
@@ -1083,14 +1099,27 @@ function parseCellKey(key) {
 }
 
 function cellBounds(cell) {
-  const southWest = map.options.crs.unproject(
-    L.point(cell.x * gridCellMeters, cell.y * gridCellMeters)
-  );
-  const northEast = map.options.crs.unproject(
-    L.point((cell.x + 1) * gridCellMeters, (cell.y + 1) * gridCellMeters)
-  );
+  const southWest = unprojectMeters(cell.x * gridCellMeters, cell.y * gridCellMeters);
+  const northEast = unprojectMeters((cell.x + 1) * gridCellMeters, (cell.y + 1) * gridCellMeters);
 
-  return L.latLngBounds(southWest, northEast);
+  return {
+    west: southWest.longitude,
+    south: southWest.latitude,
+    east: northEast.longitude,
+    north: northEast.latitude
+  };
+}
+
+function cellRing(cell) {
+  const bounds = cellBounds(cell);
+
+  return [
+    [bounds.west, bounds.south],
+    [bounds.east, bounds.south],
+    [bounds.east, bounds.north],
+    [bounds.west, bounds.north],
+    [bounds.west, bounds.south]
+  ];
 }
 
 function formatDate(value) {

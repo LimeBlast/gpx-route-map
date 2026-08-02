@@ -8,6 +8,7 @@ public/routes.json
 activity-overrides.json
 .geocode-cache.json
 .tile-cache/
+basemap/
 .DS_Store
 logs/
 .playwright-mcp/
