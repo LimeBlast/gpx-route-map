@@ -66,6 +66,14 @@ Key timing constants (all in ms, all in `main.js` top-level scope):
 - `preRevealAfterPanMs` — pause between camera settling and route appearing
 - `finalOverviewDelayMs` — wait after last route before final overview pan
 
+### Map tiles
+
+OpenStreetMap standard raster tiles, greyed with a CSS filter (`.greyscale-tiles`), not a grey tileset. Leaflet's attribution control is hidden in the reel, so `.map-attribution` prints the credit into the frame instead — it sits above where Instagram's caption block lands.
+
+OSM serves tiles with `cache-control: no-cache`, so the render script proxies them through its own static server (`/tiles/{z}/{x}/{y}.png`) backed by a disk cache in `.tile-cache/`, passed to the app via the `tiles` URL param. One fetch per tile ever, with an identifying User-Agent per OSM's usage policy; the render logs cache hits vs fetches. The dev preview hits OSM directly.
+
+The app also prefetches the next route's tiles during the current one (`prefetchRouteTiles`, capped at 48 tiles) and waits for tiles to finish loading after a camera move before revealing a route (`waitForTiles`), which matters most on long jumps like UK → Canada.
+
 ### scripts/render-instagram.mjs
 
 Node.js script. Builds the app, starts a local static server for `dist/`, launches headless Chrome via spawn, connects via CDP WebSocket (`createCdpClient`), navigates to the export URL, calls `routeProgressApp.play()`, then captures frames using `Page.startScreencast` (JPEG, ~24fps). 

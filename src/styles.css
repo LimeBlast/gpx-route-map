@@ -101,6 +101,23 @@ code {
   background: linear-gradient(to top, #0d1520 0%, #0d1520 18%, rgba(13, 21, 32, 0.75) 45%, rgba(13, 21, 32, 0.3) 70%, transparent 100%);
 }
 
+/* Leaflet's own control is hidden in the reel, so credit OSM here instead */
+.map-attribution {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 330px; /* clears Instagram's caption block at the foot of the reel */
+  z-index: 700;
+  margin: 0;
+  color: rgba(226, 232, 240, 0.65);
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-align: center;
+  text-shadow: 0 1px 4px rgba(3, 10, 20, 0.9);
+  pointer-events: none;
+}
+
 .empty-state {
   position: absolute;
   left: 50%;

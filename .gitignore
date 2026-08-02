@@ -7,6 +7,7 @@ gpx/*
 public/routes.json
 activity-overrides.json
 .geocode-cache.json
+.tile-cache/
 .DS_Store
 logs/
 .playwright-mcp/

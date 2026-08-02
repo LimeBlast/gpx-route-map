@@ -36,6 +36,8 @@ const minimumSwimDurationMs = 1600;
 const maximumSwimDurationMs = 3200;
 const swimFadeMs = 450;
 const devEndCardDelayMs = 2000; // mirrors the renderer's FINAL_HOLD_SECONDS
+const tileWaitTimeoutMs = 6000;
+const maxPrefetchTiles = 48; // OSM's tile policy frowns on bulk downloading
 
 const state = {
   routes: [],
@@ -50,7 +52,9 @@ const state = {
   routeAnimationToken: 0,
   timer: null,
   routeHeadMarker: null,
-  swimMetresTotal: 0
+  swimMetresTotal: 0,
+  tilesLoading: false,
+  prefetched: new Set()
 };
 
 updatePreviewScale();
@@ -60,11 +64,22 @@ const map = L.map("map", {
   scrollWheelZoom: false
 }).setView([54.5, -3], 6);
 
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+// The renderer passes its own cache-backed tile route; the browser hits OSM directly
+const tileUrlTemplate = urlParams.get("tiles") || "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+const tileSubdomains = ["a", "b", "c"];
+const tileLayer = L.tileLayer(tileUrlTemplate, {
   maxZoom: 19,
   className: "greyscale-tiles",
+  keepBuffer: 4,
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
 }).addTo(map);
+
+tileLayer.on("loading", () => {
+  state.tilesLoading = true;
+});
+tileLayer.on("load", () => {
+  state.tilesLoading = false;
+});
 
 map.createPane("gridPane");
 map.getPane("gridPane").style.zIndex = 410;
@@ -285,10 +300,15 @@ function tick() {
     state.timer = window.setTimeout(tick, followUpDelayMs);
   };
 
+  prefetchRouteTiles(state.routes[nextIndex + 1]);
+
   if (cameraMoved) {
     waitForCameraMove(() => {
       if (!state.isPlaying) return;
-      state.timer = window.setTimeout(revealRoute, preRevealAfterPanMs);
+      // Don't reveal onto half-drawn tiles — most obvious on a long jump
+      waitForTiles(() => {
+        state.timer = window.setTimeout(revealRoute, preRevealAfterPanMs);
+      });
     });
   } else {
     revealRoute();
@@ -446,6 +466,61 @@ function waitForCameraMove(callback) {
 
   map.once("moveend", finish);
   state.timer = window.setTimeout(finish, panDurationSeconds * 1000 + 800);
+}
+
+function waitForTiles(callback) {
+  if (!state.tilesLoading) {
+    callback();
+    return;
+  }
+
+  let isDone = false;
+  const finish = () => {
+    if (isDone) return;
+
+    isDone = true;
+    tileLayer.off("load", finish);
+    window.clearTimeout(state.timer);
+    callback();
+  };
+
+  tileLayer.once("load", finish);
+  state.timer = window.setTimeout(finish, tileWaitTimeoutMs);
+}
+
+// Warm the browser cache for where the camera is heading next, so a jump
+// between distant routes doesn't land on empty tiles
+function prefetchRouteTiles(route) {
+  if (!route || route.type === "swim" || state.prefetched.has(route.id)) return;
+
+  state.prefetched.add(route.id);
+  const bounds = cellKeysBounds(route.cells);
+
+  if (!bounds.isValid()) return;
+
+  const zoom = Math.min(map.getBoundsZoom(bounds, false, [180, 330]), 14);
+  const northWest = tileCoords(bounds.getNorthWest(), zoom);
+  const southEast = tileCoords(bounds.getSouthEast(), zoom);
+  let requested = 0;
+
+  for (let x = northWest.x - 1; x <= southEast.x + 1; x += 1) {
+    for (let y = northWest.y - 1; y <= southEast.y + 1; y += 1) {
+      if (requested >= maxPrefetchTiles) return;
+
+      requested += 1;
+      const image = new Image();
+      image.src = tileUrlTemplate
+        .replace("{s}", tileSubdomains[requested % tileSubdomains.length])
+        .replace("{z}", String(zoom))
+        .replace("{x}", String(x))
+        .replace("{y}", String(y));
+    }
+  }
+}
+
+function tileCoords(latLng, zoom) {
+  const point = map.project(latLng, zoom).divideBy(256).floor();
+  return { x: point.x, y: point.y };
 }
 
 function render() {

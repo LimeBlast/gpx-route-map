@@ -77,6 +77,16 @@ npm run render:draft    # 15fps quick preview, saves to exports/draft-route-map.
 CHROME_PATH="/path/to/chrome" npm run render:monthly
 ```
 
+## Map Tiles and Attribution
+
+Maps use OpenStreetMap's standard tiles, greyed out with a CSS filter. Every render credits
+`Map data © OpenStreetMap contributors` in the frame itself, positioned to stay clear of
+Instagram's caption block.
+
+Tiles are cached to `.tile-cache/` on first use and re-served locally after that, so repeat
+renders of the same month barely touch OSM's servers. The render prints a summary, e.g.
+`Tiles: 454 from cache, 145 fetched from OpenStreetMap`. Delete `.tile-cache/` to force a refresh.
+
 ## How the Map Works
 
 - The map starts as a grey basemap with a 1km grid over every square touched by the month's activities.

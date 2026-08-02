@@ -44,6 +44,10 @@ const exportParams = new URLSearchParams({
   endTitle: process.env.VIDEO_END_TITLE || monthDisplay || "Progress unlocked",
   titleMs: process.env.TITLE_MS || "2800"
 });
+const tileCacheDir = path.join(rootDir, ".tile-cache");
+const tileUserAgent = "gpx-route-map/1.0 (personal monthly activity reel; https://github.com/limeblast)";
+let tileCacheHits = 0;
+let tileCacheMisses = 0;
 const chromeDebugPort = Number(process.env.CHROME_DEBUG_PORT || 9223);
 const chromePath =
   process.env.CHROME_PATH ||
@@ -88,6 +92,7 @@ try {
     screenHeight: height
   });
 
+  exportParams.set("tiles", `${server.url}/tiles/{z}/{x}/{y}.png`);
   await client.send("Page.navigate", { url: `${server.url}/?${exportParams}` });
   await client.waitFor("Page.loadEventFired");
   await evaluate(client, "new Promise((resolve) => window.routeProgressApp ? resolve() : window.addEventListener('route-progress-ready', resolve, { once: true }))");
@@ -228,6 +233,7 @@ try {
   ]);
 
   console.log(`Rendered ${frame} frames to ${outputPath}`);
+  console.log(`Tiles: ${tileCacheHits} from cache, ${tileCacheMisses} fetched from OpenStreetMap`);
 } finally {
   chrome.kill("SIGTERM");
   server.close();
@@ -262,8 +268,14 @@ function run(command, args, env = {}) {
 }
 
 function startStaticServer(directory) {
-  const server = createServer((request, response) => {
+  const server = createServer(async (request, response) => {
     const url = new URL(request.url || "/", "http://127.0.0.1");
+
+    if (url.pathname.startsWith("/tiles/")) {
+      await serveTile(url.pathname, response);
+      return;
+    }
+
     const requestedPath = decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname);
     const filePath = path.join(directory, requestedPath);
 
@@ -294,6 +306,54 @@ function startStaticServer(directory) {
       });
     });
   });
+}
+
+// OSM sends cache-control: no-cache, so Chrome re-requests every tile on every
+// render. Cache them ourselves instead: one fetch per tile, ever.
+async function serveTile(pathname, response) {
+  const match = /^\/tiles\/(\d+)\/(\d+)\/(\d+)\.png$/.exec(pathname);
+
+  if (!match) {
+    response.writeHead(404);
+    response.end("Not found");
+    return;
+  }
+
+  const [, z, x, y] = match;
+  const cachePath = path.join(tileCacheDir, z, x, `${y}.png`);
+
+  try {
+    const cached = await readFile(cachePath);
+    response.writeHead(200, { "Content-Type": "image/png" });
+    response.end(cached);
+    tileCacheHits += 1;
+    return;
+  } catch {
+    // not cached yet
+  }
+
+  try {
+    const upstream = await fetch(`https://tile.openstreetmap.org/${z}/${x}/${y}.png`, {
+      headers: { "User-Agent": tileUserAgent }
+    });
+
+    if (!upstream.ok) {
+      response.writeHead(upstream.status);
+      response.end();
+      return;
+    }
+
+    const body = Buffer.from(await upstream.arrayBuffer());
+    await mkdir(path.dirname(cachePath), { recursive: true });
+    await writeFile(cachePath, body);
+    tileCacheMisses += 1;
+    response.writeHead(200, { "Content-Type": "image/png" });
+    response.end(body);
+  } catch (error) {
+    console.warn(`Tile ${z}/${x}/${y} failed: ${error.message}`);
+    response.writeHead(502);
+    response.end();
+  }
 }
 
 function contentType(filePath) {
