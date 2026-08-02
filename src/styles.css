@@ -557,7 +557,7 @@ button:hover {
 .export-mode .export-stats {
   position: absolute;
   left: 50%;
-  bottom: 380px;
+  top: 260px; /* ponytail: clears Instagram's top chrome on a 1920-tall reel */
   z-index: 700;
   display: grid;
   grid-template-columns: auto 0.7fr 0.8fr 0.9fr 1.6fr;
