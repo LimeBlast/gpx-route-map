@@ -54,7 +54,7 @@ MONTH=2025-04 npm run render:instagram
 | `FPS` | `30` | Output frame rate |
 | `FINAL_HOLD_SECONDS` | `2` | How long to hold on the final map before the stats card |
 | `END_HOLD_SECONDS` | `1.5` | How long to hold on the stats card |
-| `OUTPUT` | `exports/monthly-YYYY-MM.mp4` | Output file path |
+| `OUTPUT` | `exports/monthly-YYYY-MM.mp4` | Output file path — the month comes from `MONTH`, or from the first activity in the built `routes.json` |
 | `VIDEO_TITLE` | `My Month in Fitness` | Title card heading |
 | `VIDEO_SUBTITLE` | `Every square unlocked, one activity at a time.` | Title card subheading |
 | `VIDEO_KICKER` | Month name | Title card eyebrow label |

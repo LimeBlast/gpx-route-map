@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { createReadStream } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
@@ -24,12 +24,6 @@ function monthLabel(m) {
 }
 
 const monthDisplay = monthLabel(month);
-const outputPath = path.resolve(
-  process.env.OUTPUT ||
-    (month
-      ? path.join(rootDir, "exports", `monthly-${month}.mp4`)
-      : path.join(rootDir, "exports", "instagram-route-map.mp4"))
-);
 const fps = Number(process.env.FPS || 30);
 const width = 1080;
 const height = 1920;
@@ -57,6 +51,12 @@ const chromePath =
 
 await run("npm", ["run", "build:routes"], month ? { MONTH: month } : {});
 await run("npm", ["run", "build:app"]);
+
+// Without MONTH the filename comes from the data itself, so an unfiltered
+// render of one month's files still lands on monthly-YYYY-MM.mp4
+const outputPath = path.resolve(
+  process.env.OUTPUT || path.join(rootDir, "exports", `monthly-${month || (await renderedMonth())}.mp4`)
+);
 await mkdir(path.dirname(outputPath), { recursive: true });
 
 const frameDir = await mkdtemp(path.join(tmpdir(), "route-progress-frames-"));
@@ -232,6 +232,15 @@ try {
   chrome.kill("SIGTERM");
   server.close();
   await rm(frameDir, { recursive: true, force: true });
+}
+
+async function renderedMonth() {
+  try {
+    const { routes } = JSON.parse(await readFile(path.join(rootDir, "public", "routes.json"), "utf8"));
+    return routes[0].date.slice(0, 7);
+  } catch {
+    return lastMonth();
+  }
 }
 
 function run(command, args, env = {}) {
