@@ -32,6 +32,9 @@ const finalOverviewDelayMs = 1400;
 const finalClusterRadiusCells = 14;
 const exportTitleDurationMs = Number(urlParams.get("titleMs") || 2800);
 const speedMs = Number(urlParams.get("speed") || 5200);
+const minimumSwimDurationMs = 1600;
+const maximumSwimDurationMs = 3200;
+const swimFadeMs = 450;
 
 const state = {
   routes: [],
@@ -88,6 +91,8 @@ const elements = {
   exportEndRideCount: document.querySelector("#export-end-ride-count"),
   exportEndWalkDistance: document.querySelector("#export-end-walk-distance"),
   exportEndWalkCount: document.querySelector("#export-end-walk-count"),
+  exportEndSwimDistance: document.querySelector("#export-end-swim-distance"),
+  exportEndSwimCount: document.querySelector("#export-end-swim-count"),
   exportEndTiles: document.querySelectorAll("[data-activity-tile]"),
   exportEndSquares: document.querySelector("#export-end-squares"),
   exportEndTitle: document.querySelector("#export-end-title"),
@@ -95,7 +100,15 @@ const elements = {
   exportRouteCount: document.querySelector("#export-route-count"),
   exportSubtitle: document.querySelector("#export-subtitle"),
   exportTitle: document.querySelector("#export-title"),
-  exportTotalDistance: document.querySelector("#export-total-distance")
+  exportTotalDistance: document.querySelector("#export-total-distance"),
+  swimCard: document.querySelector("#swim-card"),
+  swimDate: document.querySelector("#swim-date"),
+  swimLanes: document.querySelector("#swim-lanes"),
+  swimLengths: document.querySelector("#swim-lengths"),
+  swimMetres: document.querySelector("#swim-metres"),
+  swimPool: document.querySelector("#swim-pool"),
+  swimStrokes: document.querySelector("#swim-strokes"),
+  swimTime: document.querySelector("#swim-time")
 };
 
 async function boot() {
@@ -110,8 +123,9 @@ async function boot() {
     state.routes = Array.isArray(data.routes) ? data.routes : [];
     state.routes.sort((left, right) => new Date(left.date) - new Date(right.date));
     state.routes.forEach((route) => {
-      route.segments = normalizedRouteSegments(route);
-      route.cells = routeCellKeys(route);
+      // Swims have no GPS, so they contribute nothing to the map
+      route.segments = route.type === "swim" ? [] : normalizedRouteSegments(route);
+      route.cells = route.type === "swim" ? [] : routeCellKeys(route);
     });
 
     await waitForMapLayout();
@@ -176,6 +190,7 @@ function exposeAppControls() {
     },
     reset() {
       pause();
+      hideSwimCard();
       state.index = -1;
       state.cameraTargetKey = "";
       render();
@@ -233,6 +248,15 @@ function tick() {
   }
 
   const nextIndex = state.index + 1;
+
+  if (state.routes[nextIndex].type === "swim") {
+    clearRouteLayers();
+    state.index = nextIndex;
+    render();
+    revealSwim(state.routes[nextIndex], tick);
+    return;
+  }
+
   clearRouteLayers();
   const cameraMoved = focusPlaybackView(nextIndex);
   const followUpDelayMs = traceDurationMs() + Math.max(speedMs * 0.2, postTraceHoldMs);
@@ -257,6 +281,86 @@ function tick() {
   }
 }
 
+// The map total covers ground covered on land; swims are shown on their own card
+function landDistanceKm(routes) {
+  return routes.reduce((sum, route) => (route.type === "swim" ? sum : sum + route.distanceKm), 0);
+}
+
+function swimDurationMs() {
+  return Math.min(Math.max(Math.round(speedMs * 0.9), minimumSwimDurationMs), maximumSwimDurationMs);
+}
+
+function revealSwim(route, done) {
+  const { swim } = route;
+  const token = state.routeAnimationToken;
+  const durationMs = swimDurationMs();
+  const holdMs = Math.max(speedMs * 0.2, postTraceHoldMs);
+  const totalSeconds = swim.lengths.reduce((sum, length) => sum + length.seconds, 0);
+
+  elements.swimDate.textContent = formatDate(route.date);
+  elements.swimPool.textContent = `${swim.poolLengthMeters} m`;
+  elements.swimStrokes.textContent = String(swim.strokes);
+  elements.swimTime.textContent = formatDuration(swim.seconds);
+  elements.swimLanes.replaceChildren(
+    ...swim.lengths.map(() => {
+      const lane = document.createElement("i");
+      lane.className = "swim-lane";
+      return lane;
+    })
+  );
+
+  const lanes = Array.from(elements.swimLanes.children);
+  const showFilled = (count) => {
+    lanes.forEach((lane, index) => lane.classList.toggle("filled", index < count));
+    elements.swimMetres.textContent = String(Math.round(count * swim.poolLengthMeters));
+    elements.swimLengths.textContent = String(count);
+  };
+
+  showFilled(0);
+  elements.swimCard.hidden = false;
+  document.body.classList.add("swim-showing");
+  requestAnimationFrame(() => elements.swimCard.classList.add("visible"));
+
+  // Lengths fill in proportion to how long each one actually took
+  const draw = (startedAt, timestamp) => {
+    if (token !== state.routeAnimationToken || !state.isPlaying) return;
+
+    const progress = Math.min((timestamp - startedAt) / durationMs, 1);
+    const targetSeconds = totalSeconds * progress;
+    let elapsed = 0;
+    let filled = 0;
+
+    for (const length of swim.lengths) {
+      if (elapsed + length.seconds > targetSeconds) break;
+      elapsed += length.seconds;
+      filled += 1;
+    }
+
+    showFilled(filled);
+
+    if (progress < 1) {
+      state.routeAnimationFrame = requestAnimationFrame((next) => draw(startedAt, next));
+      return;
+    }
+
+    showFilled(swim.lengths.length);
+    state.timer = window.setTimeout(() => {
+      if (token !== state.routeAnimationToken || !state.isPlaying) return;
+
+      elements.swimCard.classList.remove("visible");
+      document.body.classList.remove("swim-showing");
+      state.timer = window.setTimeout(() => {
+        elements.swimCard.hidden = true;
+        done();
+      }, swimFadeMs);
+    }, holdMs);
+  };
+
+  state.routeAnimationFrame = requestAnimationFrame((timestamp) => {
+    state.timer = window.setTimeout(() => draw(timestamp, performance.now()), swimFadeMs);
+  });
+}
+
 function showFinalOverview() {
   const bounds = densestClusterBounds();
 
@@ -268,6 +372,16 @@ function showFinalOverview() {
 function pause() {
   state.isPlaying = false;
   window.clearTimeout(state.timer);
+}
+
+function hideSwimCard() {
+  document.body.classList.remove("swim-showing");
+  elements.swimCard.classList.remove("visible");
+  elements.swimCard.hidden = true;
+}
+
+function formatDuration(seconds) {
+  return `${Math.floor(seconds / 60)}:${String(Math.round(seconds % 60)).padStart(2, "0")}`;
 }
 
 function waitForMapLayout() {
@@ -303,7 +417,7 @@ function render() {
   const visibleRoutes = state.routes.slice(0, state.index + 1);
   const latestRoute = visibleRoutes.at(-1);
   const previousRoutes = latestRoute ? visibleRoutes.slice(0, -1) : visibleRoutes;
-  const visibleDistance = visibleRoutes.reduce((sum, route) => sum + route.distanceKm, 0);
+  const visibleDistance = landDistanceKm(visibleRoutes);
   const completedCells = completedCellMap(previousRoutes);
 
   state.completedCells = completedCells;
@@ -327,9 +441,11 @@ function updateExportEndCard() {
   const runs = routeSource.filter((route) => route.type === "run");
   const rides = routeSource.filter((route) => route.type === "ride");
   const walks = routeSource.filter((route) => route.type === "walk");
+  const swims = routeSource.filter((route) => route.type === "swim");
   const runDistance = runs.reduce((sum, route) => sum + route.distanceKm, 0);
   const rideDistance = rides.reduce((sum, route) => sum + route.distanceKm, 0);
   const walkDistance = walks.reduce((sum, route) => sum + route.distanceKm, 0);
+  const swimMetres = swims.reduce((sum, route) => sum + route.swim.meters, 0);
 
   elements.exportEndTitle.textContent = urlParams.get("endTitle") || routesMonthLabel(state.routes) || "Progress unlocked";
   elements.exportEndActivities.textContent = String(routeSource.length);
@@ -342,7 +458,10 @@ function updateExportEndCard() {
   elements.exportEndWalkCount.textContent = `${walks.length} ${walks.length === 1 ? "walk" : "walks"}`;
 
   // Months without a given activity shouldn't show an empty 0 km tile
-  const counts = { run: runs.length, ride: rides.length, walk: walks.length };
+  elements.exportEndSwimDistance.textContent = `${swimMetres.toLocaleString()} m`;
+  elements.exportEndSwimCount.textContent = `${swims.length} ${swims.length === 1 ? "swim" : "swims"}`;
+
+  const counts = { run: runs.length, ride: rides.length, walk: walks.length, swim: swims.length };
   elements.exportEndTiles.forEach((tile) => {
     tile.hidden = counts[tile.dataset.activityTile] === 0;
   });
@@ -474,10 +593,7 @@ function drawRouteProgress(route, color, targetDistanceMeters, baseCompletedCell
   state.completedCells = completedCells;
   renderGrid(completedCells);
   updateVisibleSquareCounts(completedCells);
-  updateVisibleDistance(
-    state.routes.slice(0, state.index).reduce((sum, r) => sum + r.distanceKm, 0) +
-      targetDistanceMeters / 1000
-  );
+  updateVisibleDistance(landDistanceKm(state.routes.slice(0, state.index)) + targetDistanceMeters / 1000);
 
   if (visibleSegments.length === 0) {
     removeRouteHeadMarker();

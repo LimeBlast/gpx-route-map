@@ -42,8 +42,9 @@ MONTH=2025-04 npm run render:instagram
 
 1. **Title card** — month name, subtitle, and a run/ride/mixed legend
 2. **Route playback** — the camera pans to each activity, then its squares fill in with a route trace
-3. **Final overview** — the camera flies to the densest activity area and holds
-4. **Stats card** — month name as heading, with activity count, squares filled, and separate running, cycling and walking distances
+3. **Swim cards** — pool swims have no GPS, so each one takes over the frame in date order, filling one bar per length
+4. **Final overview** — the camera flies to the densest activity area and holds
+5. **Stats card** — month name as heading, with activity count, squares filled, and separate running, cycling, walking and swimming totals
 
 ### Tuning the render
 
@@ -85,7 +86,7 @@ CHROME_PATH="/path/to/chrome" npm run render:monthly
 - The camera pans cinematically to each activity before its squares are revealed.
 - After the camera settles, the current route trace draws across the map.
 - After all routes, the camera flies to the densest cluster of activity and holds.
-- The stats card fades in showing the month, total activities, squares filled, and separate run, cycling and walking distances.
+- The stats card fades in showing the month, total activities, squares filled, and separate run, cycling, walking and swimming totals.
 
 ## Activity Types
 
@@ -94,6 +95,7 @@ The build script only includes activities classified as:
 - `run` — filename or activity name contains words like `run` or `running`
 - `ride` — filename or activity name contains words like `ride`, `bike`, or `cycling`
 - `walk` — filename or activity name contains words like `walk`, `hike`, or `trek` (hikes are treated as walks)
+- `swim` — filename or activity name contains `swim` or `swimming`
 
 Anything else is skipped. For FIT files, the script also reads the FIT sport metadata when available.
 

@@ -24,6 +24,13 @@ const routes = [];
 for (const file of files) {
   const filePath = path.join(gpxDir, file);
   const route = await readRoute(filePath, file);
+  const declaredType = activityOverrides[file] || route.type;
+
+  if (declaredType === "swim") {
+    const swim = swimEntry(file, route, monthFilter);
+    if (swim) routes.push(swim);
+    continue;
+  }
 
   if (route.points.length < 2) {
     console.warn(`Skipping ${file}: fewer than 2 track points`);
@@ -42,10 +49,10 @@ for (const file of files) {
   const date = firstPointTime || route.date || fileStats.mtime.toISOString();
   const segments = splitTrackSegments(trimmedPoints);
   const distanceKm = segments.reduce((sum, segment) => sum + distanceInKm(segment), 0);
-  const type = activityOverrides[file] || route.type || inferType(file, route.name);
+  const type = declaredType || inferType(file, route.name);
 
   if (!["run", "ride", "walk"].includes(type)) {
-    console.warn(`Skipping ${file}: not a run, ride or walk`);
+    console.warn(`Skipping ${file}: not a run, ride, walk or swim`);
     continue;
   }
 
@@ -86,6 +93,36 @@ await writeFile(
 );
 
 console.log(`Wrote ${routes.length} routes to ${path.relative(rootDir, outputPath)}`);
+
+// Pool swims carry no GPS, so they are built from FIT session/length messages
+function swimEntry(file, route, month) {
+  const { swim } = route;
+
+  if (!swim || swim.lengths.length === 0) {
+    console.warn(`Skipping ${file}: swim has no recorded lengths`);
+    return null;
+  }
+
+  if (month && !dateIsInMonth(route.date, month)) {
+    return null;
+  }
+
+  return {
+    id: slugify(file.replace(/\.(fit|gpx)$/i, "")),
+    file,
+    name: route.name,
+    type: "swim",
+    date: route.date,
+    distanceKm: round(swim.meters / 1000, 3),
+    swim: {
+      meters: swim.meters,
+      seconds: swim.seconds,
+      strokes: swim.strokes,
+      poolLengthMeters: swim.poolLengthMeters,
+      lengths: swim.lengths
+    }
+  };
+}
 
 async function readRoute(filePath, file) {
   const extension = path.extname(file).toLowerCase();
@@ -204,7 +241,28 @@ function readFitRoute(buffer, file) {
     name,
     type: inferType(file, name, messages.sport),
     date: points.find((point) => point.time)?.time || fitTimestampToIso(messages.timestamp),
-    points
+    points,
+    swim: swimSummary(messages)
+  };
+}
+
+function swimSummary({ session, lengths }) {
+  if (!session || session.total_distance == null) return null;
+
+  const poolLengthMeters = round((session.pool_length || 0) / 100, 2);
+  const activeLengths = lengths
+    .filter((length) => (length.total_strokes || 0) > 0)
+    .map((length) => ({
+      seconds: round((length.total_elapsed_time || 0) / 1000, 2),
+      strokes: length.total_strokes
+    }));
+
+  return {
+    meters: Math.round(session.total_distance / 100),
+    seconds: Math.round(session.total_elapsed_time / 1000),
+    strokes: session.total_cycles || 0,
+    poolLengthMeters,
+    lengths: activeLengths
   };
 }
 
@@ -215,7 +273,8 @@ function readFitMessages(buffer) {
   const dataEnd = dataStart + dataSize;
   const definitions = new Map();
   const records = [];
-  const messages = { records, sport: "", timestamp: null };
+  const lengths = [];
+  const messages = { records, lengths, session: null, sport: "", timestamp: null };
 
   let offset = dataStart;
   let timestampAccumulator = null;
@@ -259,7 +318,12 @@ function readFitMessages(buffer) {
       }
     } else if (definition.globalMessageNumber === 18) {
       messages.sport ||= sportName(parsed.values.sport);
-      messages.timestamp ||= parsed.values.timestamp;
+      // start_time keeps swims in the right order within a day; the plain
+      // timestamp on a session message is its end
+      messages.timestamp ||= parsed.values.start_time || parsed.values.timestamp;
+      messages.session ||= parsed.values;
+    } else if (definition.globalMessageNumber === 101) {
+      lengths.push(parsed.values);
     } else if (definition.globalMessageNumber === 34) {
       messages.timestamp ||= parsed.values.timestamp;
     }
@@ -396,7 +460,20 @@ function fitFieldName(globalMessageNumber, fieldNumber) {
 
   if (globalMessageNumber === 18) {
     return {
+      2: "start_time",
       5: "sport",
+      7: "total_elapsed_time",
+      9: "total_distance",
+      10: "total_cycles",
+      44: "pool_length",
+      253: "timestamp"
+    }[fieldNumber];
+  }
+
+  if (globalMessageNumber === 101) {
+    return {
+      3: "total_elapsed_time",
+      5: "total_strokes",
       253: "timestamp"
     }[fieldNumber];
   }
@@ -415,7 +492,8 @@ function sportName(value) {
     1: "run",
     2: "ride",
     11: "walk",
-    17: "walk" // hiking counts as walking
+    17: "walk", // hiking counts as walking
+    5: "swim"
   }[value] || "";
 }
 
@@ -451,6 +529,7 @@ function inferType(file, name, sport = "") {
   if (/\b(run|running|jog|jogging)\b/.test(value)) return "run";
   if (/\b(ride|riding|bike|biking|cycle|cycling|cyclist|bicycle)\b/.test(value)) return "ride";
   if (/\b(walk|walking|hike|hiking|ramble|rambling|trek|trekking)\b/.test(value)) return "walk";
+  if (/\b(swim|swimming)\b/.test(value)) return "swim";
 
   return "other";
 }

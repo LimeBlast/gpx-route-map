@@ -216,6 +216,10 @@ body.export-ended .export-end-card {
   background: #f59e0b;
 }
 
+.legend-swim {
+  background: #22d3ee;
+}
+
 .legend-mixed {
   background: #a855f7;
 }
@@ -276,15 +280,15 @@ body.export-ended .export-end-card {
   color: #fcd34d;
 }
 
-.export-end-type-run strong,
-.export-end-type-ride strong,
-.export-end-type-walk strong {
-  font-size: 2.5rem;
+.export-end-type-swim span {
+  color: #67e8f9;
 }
 
-/* An odd number of activity tiles: the last one spans the full row */
-.export-end-grid div[data-activity-tile]:last-of-type:nth-of-type(odd) {
-  grid-column: span 2;
+.export-end-type-run strong,
+.export-end-type-ride strong,
+.export-end-type-walk strong,
+.export-end-type-swim strong {
+  font-size: 2.5rem;
 }
 
 .export-activity-callout {
@@ -326,7 +330,112 @@ body.export-ended .export-end-card {
   stroke: #fcd34d;
 }
 
+/* Swims have no map presence, so they take over the frame for a beat */
+.swim-card {
+  position: absolute;
+  inset: 0;
+  z-index: 770;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 1.6rem;
+  padding: 96px;
+  text-align: center;
+  background:
+    radial-gradient(circle at 50% 40%, rgba(34, 211, 238, 0.28), transparent 30%),
+    linear-gradient(180deg, rgba(4, 32, 46, 0.94), rgba(3, 20, 32, 0.9));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 450ms ease;
+}
+
+.swim-card.visible {
+  opacity: 1;
+}
+
+.swim-card[hidden] {
+  display: none;
+}
+
+.swim-card p {
+  margin: 0;
+  color: #67e8f9;
+  font-size: 1.6rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.swim-card h2 {
+  margin: 0;
+  font-size: 7rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 0.9;
+}
+
+.swim-card h2 small {
+  margin-left: 0.5rem;
+  color: #a5f3fc;
+  font-size: 2.6rem;
+  font-weight: 700;
+}
+
+/* One bar per length swum, filling in as the lengths tick by */
+.swim-lanes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 760px;
+}
+
+.swim-lane {
+  width: 58px;
+  height: 16px;
+  background: rgba(165, 243, 252, 0.16);
+  border-radius: 999px;
+  transition: background 180ms ease, box-shadow 180ms ease;
+}
+
+.swim-lane.filled {
+  background: #22d3ee;
+  box-shadow: 0 0 14px rgba(34, 211, 238, 0.6);
+}
+
+.swim-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  width: 100%;
+  max-width: 820px;
+}
+
+.swim-facts div {
+  display: grid;
+  gap: 0.4rem;
+  padding: 1.1rem 0.6rem;
+  background: rgba(8, 47, 63, 0.7);
+  border: 1px solid rgba(165, 243, 252, 0.22);
+  border-radius: 1.2rem;
+}
+
+.swim-facts span {
+  color: #7dd3fc;
+  font-size: 0.95rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.swim-facts strong {
+  font-size: 2.1rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
 .export-stats {
+  transition: opacity 350ms ease;
   position: absolute;
   left: 50%;
   top: 260px; /* ponytail: clears Instagram's top chrome on a 1920-tall reel */
@@ -346,7 +455,8 @@ body.export-ended .export-end-card {
 }
 
 body:not(.export-started) .export-stats,
-body.export-ended .export-stats {
+body.export-ended .export-stats,
+body.swim-showing .export-stats {
   opacity: 0;
 }
 

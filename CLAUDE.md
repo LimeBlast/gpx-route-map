@@ -79,8 +79,15 @@ Three types are kept — `run`, `ride`, `walk` — matched against filename, act
 - `run` — `\b(run|running|jog|jogging)\b`
 - `ride` — `\b(ride|riding|bike|biking|cycle|cycling|cyclist|bicycle)\b`
 - `walk` — `\b(walk|walking|hike|hiking|ramble|rambling|trek|trekking)\b` (hikes are treated as walks)
+- `swim` — `\b(swim|swimming)\b`
 
-FIT sport enums map `1 → run`, `2 → ride`, `11`/`17 → walk`. Anything else is skipped. Override per-file via `activity-overrides.json` (copy from `activity-overrides.example.json`).
+FIT sport enums map `1 → run`, `2 → ride`, `11`/`17 → walk`, `5 → swim`. Anything else is skipped. Override per-file via `activity-overrides.json` (copy from `activity-overrides.example.json`).
+
+### Swims
+
+Pool swims have no GPS, so they are built from FIT `session` (18) and `length` (101) messages instead of track points: total distance, elapsed time, stroke count, pool length, and a per-length list of `{ seconds, strokes }`. They are stored in `routes.json` with `type: "swim"` and a `swim` object, and no `coordinates`/`segments`.
+
+During playback a swim takes over the frame (`#swim-card`) in date order rather than touching the map: one bar per length fills in proportion to how long each length actually took, with the metre count rising alongside. Swims contribute nothing to the square count or the map distance total — `landDistanceKm()` excludes them — and appear on the stats card in metres.
 
 ### Browser preview
 
