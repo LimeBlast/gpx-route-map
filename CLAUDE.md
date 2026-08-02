@@ -87,6 +87,8 @@ FIT sport enums map `1 → run`, `2 → ride`, `11`/`17 → walk`, `5 → swim`.
 
 Pool swims have no GPS, so they are built from FIT `session` (18) and `length` (101) messages instead of track points: total distance, elapsed time, stroke count, pool length, and a per-length list of `{ seconds, strokes }`. They are stored in `routes.json` with `type: "swim"` and a `swim` object, and no `coordinates`/`segments`.
 
+A vertical water meter (`#swim-meter`) runs down the left of the frame for the whole reel, starting empty and filling toward the month's total swim distance as each swim plays. It sits above the swim card so it can be seen rising.
+
 During playback a swim takes over the frame (`#swim-card`) in date order rather than touching the map: one bar per length fills in proportion to how long each length actually took, with the metre count rising alongside. Swims contribute nothing to the square count or the map distance total — `landDistanceKm()` excludes them — and appear on the stats card in metres.
 
 ### Browser preview

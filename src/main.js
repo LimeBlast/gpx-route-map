@@ -48,7 +48,8 @@ const state = {
   routeAnimationFrame: null,
   routeAnimationToken: 0,
   timer: null,
-  routeHeadMarker: null
+  routeHeadMarker: null,
+  swimMetresTotal: 0
 };
 
 updatePreviewScale();
@@ -102,6 +103,9 @@ const elements = {
   exportTitle: document.querySelector("#export-title"),
   exportTotalDistance: document.querySelector("#export-total-distance"),
   swimCard: document.querySelector("#swim-card"),
+  swimMeter: document.querySelector("#swim-meter"),
+  swimMeterFill: document.querySelector("#swim-meter-fill"),
+  swimMeterLabel: document.querySelector("#swim-meter-label"),
   swimDate: document.querySelector("#swim-date"),
   swimLanes: document.querySelector("#swim-lanes"),
   swimLengths: document.querySelector("#swim-lengths"),
@@ -128,10 +132,17 @@ async function boot() {
       route.cells = route.type === "swim" ? [] : routeCellKeys(route);
     });
 
+    state.swimMetresTotal = state.routes.reduce(
+      (sum, route) => (route.type === "swim" ? sum + route.swim.meters : sum),
+      0
+    );
+
     await waitForMapLayout();
     bindMapEvents();
     applyCardText();
     elements.emptyState.hidden = state.routes.length > 0;
+    elements.swimMeter.hidden = state.swimMetresTotal === 0;
+    setSwimMeter(0);
     buildGrid();
     render();
     fitAllRoutes();
@@ -191,6 +202,7 @@ function exposeAppControls() {
     reset() {
       pause();
       hideSwimCard();
+      setSwimMeter(0);
       state.index = -1;
       state.cameraTargetKey = "";
       render();
@@ -286,12 +298,25 @@ function landDistanceKm(routes) {
   return routes.reduce((sum, route) => (route.type === "swim" ? sum : sum + route.distanceKm), 0);
 }
 
+function setSwimMeter(metres) {
+  const fraction = state.swimMetresTotal > 0 ? metres / state.swimMetresTotal : 0;
+  elements.swimMeterFill.style.height = `${(fraction * 100).toFixed(2)}%`;
+  elements.swimMeterLabel.textContent = `${Math.round(metres).toLocaleString()} m`;
+}
+
+function swimMetresBefore(index) {
+  return state.routes
+    .slice(0, index)
+    .reduce((sum, route) => (route.type === "swim" ? sum + route.swim.meters : sum), 0);
+}
+
 function swimDurationMs() {
   return Math.min(Math.max(Math.round(speedMs * 0.9), minimumSwimDurationMs), maximumSwimDurationMs);
 }
 
 function revealSwim(route, done) {
   const { swim } = route;
+  const metresBefore = swimMetresBefore(state.index);
   const token = state.routeAnimationToken;
   const durationMs = swimDurationMs();
   const holdMs = Math.max(speedMs * 0.2, postTraceHoldMs);
@@ -312,8 +337,10 @@ function revealSwim(route, done) {
   const lanes = Array.from(elements.swimLanes.children);
   const showFilled = (count) => {
     lanes.forEach((lane, index) => lane.classList.toggle("filled", index < count));
-    elements.swimMetres.textContent = String(Math.round(count * swim.poolLengthMeters));
+    const metres = Math.round(count * swim.poolLengthMeters);
+    elements.swimMetres.textContent = String(metres);
     elements.swimLengths.textContent = String(count);
+    setSwimMeter(metresBefore + metres);
   };
 
   showFilled(0);

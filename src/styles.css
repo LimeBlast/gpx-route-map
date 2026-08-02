@@ -330,6 +330,70 @@ body.export-ended .export-end-card {
   stroke: #fcd34d;
 }
 
+/* Cumulative swim distance for the month, filling as each swim plays.
+   Sits above the swim card so it can be seen rising during a swim. */
+.swim-meter {
+  position: absolute;
+  left: 44px;
+  top: 470px;
+  z-index: 780;
+  display: grid;
+  justify-items: center;
+  gap: 0.7rem;
+  pointer-events: none;
+}
+
+.swim-meter[hidden] {
+  display: none;
+}
+
+.swim-meter-tube {
+  position: relative;
+  width: 58px;
+  height: 880px;
+  overflow: hidden;
+  background: rgba(8, 32, 46, 0.55);
+  border: 2px solid rgba(165, 243, 252, 0.45);
+  border-radius: 999px;
+  box-shadow: 0 12px 40px rgba(3, 20, 32, 0.5), inset 0 0 20px rgba(3, 20, 32, 0.6);
+  backdrop-filter: blur(6px);
+}
+
+.swim-meter-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0;
+  background: linear-gradient(180deg, #67e8f9 0%, #22d3ee 30%, #0891b2 100%);
+  border-radius: 999px;
+  box-shadow: 0 0 22px rgba(34, 211, 238, 0.55);
+}
+
+/* Meniscus: a paler band at the waterline */
+.swim-meter-fill::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 10px;
+  background: #cffafe;
+  border-radius: 999px;
+}
+
+.swim-meter span {
+  padding: 0.35rem 0.7rem;
+  color: #a5f3fc;
+  font-size: 1.5rem;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  background: rgba(3, 20, 32, 0.8);
+  border: 1px solid rgba(165, 243, 252, 0.3);
+  border-radius: 999px;
+}
+
 /* Swims have no map presence, so they take over the frame for a beat */
 .swim-card {
   position: absolute;
