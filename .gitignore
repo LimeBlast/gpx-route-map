@@ -6,5 +6,6 @@ gpx/*
 !gpx/.gitkeep
 public/routes.json
 activity-overrides.json
+.geocode-cache.json
 .DS_Store
 logs/

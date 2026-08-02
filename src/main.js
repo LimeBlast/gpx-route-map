@@ -95,8 +95,10 @@ const elements = {
   activityFilter: document.querySelector("#activity-filter"),
   cinematicPan: document.querySelector("#cinematic-pan"),
   currentDate: document.querySelector("#current-date"),
+  currentLocation: document.querySelector("#current-location"),
   emptyState: document.querySelector("#empty-state"),
   exportCurrentDate: document.querySelector("#export-current-date"),
+  exportLocation: document.querySelector("#export-location"),
   activityCallout: document.querySelector("#export-activity-callout"),
   calloutIcon: document.querySelector("#callout-icon"),
   exportEndActivities: document.querySelector("#export-end-activities"),
@@ -451,9 +453,11 @@ function render() {
   elements.routeCount.textContent = String(completedCells.size);
   elements.totalDistance.textContent = `${visibleDistance.toFixed(1)} km`;
   elements.currentDate.textContent = latestRoute ? formatDate(latestRoute.date) : "—";
+  elements.currentLocation.textContent = latestRoute?.location || "—";
   elements.exportRouteCount.textContent = String(completedCells.size);
   elements.exportTotalDistance.textContent = `${visibleDistance.toFixed(1)} km`;
   elements.exportCurrentDate.textContent = latestRoute ? formatDate(latestRoute.date) : "—";
+  elements.exportLocation.textContent = latestRoute?.location || "—";
   updateExportEndCard();
   elements.timeline.value = String(state.index);
   renderRouteList(visibleRoutes, latestRoute);

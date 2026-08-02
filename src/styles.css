@@ -560,7 +560,7 @@ button:hover {
   bottom: 380px;
   z-index: 700;
   display: grid;
-  grid-template-columns: auto repeat(3, 1fr);
+  grid-template-columns: auto 0.7fr 0.8fr 0.9fr 1.6fr;
   gap: 0.8rem;
   width: calc(100% - 96px);
   padding: 1.25rem;
@@ -596,8 +596,15 @@ button:hover {
 }
 
 .export-stats strong {
-  font-size: 2.1rem;
+  font-size: 1.7rem;
   line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.export-stats #export-location {
+  font-size: 2rem;
 }
 
 @media (max-width: 840px) {

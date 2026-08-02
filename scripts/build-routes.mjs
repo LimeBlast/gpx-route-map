@@ -7,11 +7,13 @@ const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const gpxDir = path.join(rootDir, "gpx");
 const outputPath = path.join(rootDir, "public", "routes.json");
 const overridesPath = path.join(rootDir, "activity-overrides.json");
+const geocodeCachePath = path.join(rootDir, ".geocode-cache.json");
 const trimMeters = Number(process.env.TRIM_METERS || 0);
 const maxLineGapMeters = Number(process.env.MAX_LINE_GAP_METERS || 2500);
 const monthFilter = process.env.MONTH || ""; // e.g. "2025-05" to include only that month
 const supportedExtensions = new Set([".fit", ".gpx"]);
 const activityOverrides = await readActivityOverrides();
+const geocodeCache = await readGeocodeCache();
 
 const files = (await readdir(gpxDir))
   .filter((file) => supportedExtensions.has(path.extname(file).toLowerCase()))
@@ -51,12 +53,16 @@ for (const file of files) {
     continue;
   }
 
+  const [startPoint] = trimmedPoints;
+  const location = await reverseGeocode(startPoint.latitude, startPoint.longitude);
+
   routes.push({
     id: slugify(file.replace(/\.(fit|gpx)$/i, "")),
     file,
     name: route.name,
     type,
     date,
+    location,
     distanceKm: round(distanceKm, 3),
     pointCount: trimmedPoints.length,
     segmentCount: segments.length,
@@ -64,6 +70,8 @@ for (const file of files) {
     coordinates: trimmedPoints.map((point) => [point.longitude, point.latitude])
   });
 }
+
+await writeGeocodeCache();
 
 routes.sort((left, right) => new Date(left.date) - new Date(right.date));
 
@@ -87,6 +95,57 @@ async function readRoute(filePath, file) {
   }
 
   return readGpxRoute(await readFile(filePath, "utf8"), file);
+}
+
+async function readGeocodeCache() {
+  try {
+    return JSON.parse(await readFile(geocodeCachePath, "utf8"));
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      return {};
+    }
+
+    throw error;
+  }
+}
+
+async function writeGeocodeCache() {
+  await writeFile(geocodeCachePath, `${JSON.stringify(geocodeCache, null, 2)}\n`);
+}
+
+function geocodeCacheKey(latitude, longitude) {
+  return `${latitude.toFixed(2)},${longitude.toFixed(2)}`;
+}
+
+async function reverseGeocode(latitude, longitude) {
+  const key = geocodeCacheKey(latitude, longitude);
+
+  if (key in geocodeCache) {
+    return geocodeCache[key];
+  }
+
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&zoom=12&format=jsonv2`;
+    const response = await fetch(url, {
+      headers: { "User-Agent": "gpx-route-map (personal monthly reel generator)" }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Nominatim responded ${response.status}`);
+    }
+
+    const data = await response.json();
+    const address = data.address || {};
+    const location =
+      address.city || address.town || address.village || address.suburb || address.county || data.name || "";
+
+    geocodeCache[key] = location;
+    await new Promise((resolve) => setTimeout(resolve, 1000)); // Nominatim usage policy: max 1 req/sec
+    return location;
+  } catch (error) {
+    console.warn(`Reverse geocode failed for ${latitude},${longitude}: ${error.message}`);
+    return "";
+  }
 }
 
 async function readActivityOverrides() {
