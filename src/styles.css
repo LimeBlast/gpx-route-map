@@ -338,7 +338,7 @@ body.export-ended .export-end-card {
   display: grid;
   align-content: center;
   justify-items: center;
-  gap: 1.6rem;
+  gap: 1.2rem;
   padding: 96px;
   text-align: center;
   background:
@@ -359,11 +359,29 @@ body.export-ended .export-end-card {
 
 .swim-card p {
   margin: 0;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.swim-kicker {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
   color: #67e8f9;
   font-size: 1.6rem;
-  font-weight: 900;
   letter-spacing: 0.16em;
-  text-transform: uppercase;
+}
+
+.swim-kicker svg {
+  width: 3.4rem;
+  height: 3.4rem;
+  stroke: #22d3ee;
+}
+
+.swim-date {
+  color: #a5f3fc;
+  font-size: 1.3rem;
+  letter-spacing: 0.12em;
 }
 
 .swim-card h2 {
