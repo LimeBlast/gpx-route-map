@@ -330,6 +330,10 @@ body.export-ended .export-end-card {
   stroke: #fcd34d;
 }
 
+.callout-icon.swim svg {
+  stroke: #67e8f9;
+}
+
 /* Cumulative swim distance for the month, filling as each swim plays.
    Sits under the stats bar, above the swim card so it can be seen rising. */
 .swim-meter {
@@ -343,6 +347,7 @@ body.export-ended .export-end-card {
   width: calc(100% - 96px);
   transform: translateX(-50%);
   pointer-events: none;
+  transition: opacity 350ms ease;
 }
 
 .swim-meter[hidden] {
@@ -535,7 +540,7 @@ body.export-ended .export-end-card {
   position: absolute;
   left: 50%;
   top: 260px; /* ponytail: clears Instagram's top chrome on a 1920-tall reel */
-  z-index: 700;
+  z-index: 780;
   display: grid;
   grid-template-columns: auto 0.7fr 0.8fr 0.9fr 1.6fr;
   gap: 0.8rem;
@@ -551,8 +556,11 @@ body.export-ended .export-end-card {
 }
 
 body:not(.export-started) .export-stats,
-body.export-ended .export-stats,
-body.swim-showing .export-stats {
+body.export-ended .export-stats {
+  opacity: 0;
+}
+
+body.export-ended .swim-meter {
   opacity: 0;
 }
 
