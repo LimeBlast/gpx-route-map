@@ -13,237 +13,48 @@
 }
 
 body {
+  width: 100vw;
+  height: 100vh;
   margin: 0;
-}
-
-button,
-input,
-select {
-  font: inherit;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top, rgba(56, 189, 248, 0.16), transparent 34%),
+    #08111f;
 }
 
 code {
   color: #bfdbfe;
 }
 
+/* The reel frame: always 1080×1920, scaled down to fit smaller viewports
+   (the renderer uses an exact 1080×1920 viewport, so scale stays 1 there). */
 #app {
-  display: grid;
-  grid-template-columns: minmax(320px, 410px) 1fr;
-  min-height: 100vh;
-}
-
-.sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-  padding: 2rem;
-  background:
-    radial-gradient(circle at top left, rgba(56, 189, 248, 0.18), transparent 35%),
-    linear-gradient(180deg, #0f172a 0%, #08111f 100%);
-  border-right: 1px solid rgba(148, 163, 184, 0.18);
-  overflow-y: auto;
-}
-
-.eyebrow {
-  margin: 0;
-  color: #38bdf8;
-  font-size: 0.8rem;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-h1 {
-  margin: 0;
-  font-size: clamp(2rem, 5vw, 3.6rem);
-  line-height: 0.95;
-}
-
-.intro {
-  margin: 0;
-  color: #b6c2d1;
-  line-height: 1.55;
-}
-
-.stats {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.75rem;
-}
-
-.stats div,
-.controls,
-.route-list li {
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  background: rgba(15, 23, 42, 0.74);
-  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.25);
-}
-
-.stats div {
-  padding: 0.9rem;
-  border-radius: 1rem;
-}
-
-.stats strong {
-  display: block;
-  font-size: 1.35rem;
-}
-
-.stats span,
-.route-meta {
-  color: #94a3b8;
-  font-size: 0.78rem;
-}
-
-.controls {
-  display: grid;
-  gap: 1rem;
-  padding: 1rem;
-  border-radius: 1.25rem;
-}
-
-.controls label {
-  display: grid;
-  gap: 0.45rem;
-  color: #cbd5e1;
-  font-size: 0.9rem;
-  font-weight: 700;
-}
-
-.controls .checkbox-control {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  font-weight: 800;
-}
-
-.checkbox-control input {
-  width: 1.05rem;
-  height: 1.05rem;
-  accent-color: #7dd3fc;
-}
-
-.controls select,
-.controls input[type="range"] {
-  width: 100%;
-}
-
-.controls select {
-  min-height: 2.5rem;
-  color: #e2e8f0;
-  background: #111827;
-  border: 1px solid rgba(148, 163, 184, 0.3);
-  border-radius: 0.7rem;
-  padding: 0 0.75rem;
-}
-
-.buttons {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.75rem;
-}
-
-.export-launcher {
-  display: grid;
-  gap: 0.65rem;
-  padding-top: 1rem;
-  border-top: 1px solid rgba(148, 163, 184, 0.18);
-}
-
-.export-launcher p {
-  margin: 0;
-  color: #93c5fd;
-  font-size: 0.78rem;
-  font-weight: 900;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.export-launcher button {
-  color: #f8fafc;
-  background: #7c3aed;
-}
-
-.export-launcher button:hover {
-  background: #8b5cf6;
-}
-
-button {
-  min-height: 2.6rem;
-  color: #06111f;
-  background: #7dd3fc;
-  border: 0;
-  border-radius: 999px;
-  cursor: pointer;
-  font-weight: 800;
-}
-
-button:hover {
-  background: #bae6fd;
-}
-
-.route-list {
-  display: grid;
-  gap: 0.6rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.route-list li {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 0.2rem 0.7rem;
-  padding: 0.85rem;
-  border-radius: 0.95rem;
-}
-
-.route-list li.active {
-  border-color: rgba(125, 211, 252, 0.7);
-}
-
-.route-type {
-  grid-row: span 2;
-  align-self: start;
-  min-width: 3.1rem;
-  padding: 0.18rem 0.45rem;
-  border-radius: 999px;
-  color: #06111f;
-  font-size: 0.72rem;
-  font-weight: 900;
-  text-align: center;
-  text-transform: uppercase;
-}
-
-.route-type.run {
-  background: #86efac;
-}
-
-.route-type.ride {
-  background: #7dd3fc;
-}
-
-.route-type.other {
-  background: #fdba74;
-}
-
-.route-name {
-  min-width: 0;
-  overflow: hidden;
-  font-weight: 800;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 1080px;
+  height: 1920px;
+  transform: translate(-50%, -50%) scale(var(--reel-scale, 1));
+  transform-origin: center;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.42);
 }
 
 .map-panel {
   position: relative;
-  min-height: 100vh;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #d1d5db;
 }
 
 #map {
   position: absolute;
   inset: 0;
   background: #d1d5db;
+}
+
+.leaflet-control-container {
+  display: none;
 }
 
 .greyscale-tiles {
@@ -265,6 +76,29 @@ button:hover {
     fill-opacity 180ms ease,
     stroke 180ms ease,
     stroke-opacity 180ms ease;
+}
+
+/* Top and bottom vignettes keep overlay text legible over the basemap */
+.map-panel::before,
+.map-panel::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 600;
+  pointer-events: none;
+}
+
+.map-panel::before {
+  top: 0;
+  height: 260px;
+  background: linear-gradient(to bottom, #0d1520 0%, transparent 100%);
+}
+
+.map-panel::after {
+  bottom: 0;
+  height: 560px;
+  background: linear-gradient(to top, #0d1520 0%, #0d1520 18%, rgba(13, 21, 32, 0.75) 45%, rgba(13, 21, 32, 0.3) 70%, transparent 100%);
 }
 
 .empty-state {
@@ -291,87 +125,7 @@ button:hover {
   color: #334155;
 }
 
-.export-stats {
-  display: none;
-}
-
 .export-card {
-  display: none;
-}
-
-.export-mode {
-  width: var(--export-width, 1080px);
-  height: var(--export-height, 1920px);
-  overflow: hidden;
-  background: #d1d5db;
-}
-
-.export-mode #app {
-  display: block;
-  width: var(--export-width, 1080px);
-  height: var(--export-height, 1920px);
-  min-height: 0;
-}
-
-.export-mode .sidebar {
-  display: none;
-}
-
-.export-mode .map-panel {
-  width: var(--export-width, 1080px);
-  height: var(--export-height, 1920px);
-  min-height: 0;
-}
-
-.export-mode #map {
-  inset: 0;
-}
-
-.export-mode .leaflet-control-container {
-  display: none;
-}
-
-.export-mode .map-panel::before,
-.export-mode .map-panel::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  z-index: 600;
-  pointer-events: none;
-}
-
-.export-mode .map-panel::before {
-  top: 0;
-  height: 260px;
-  background: linear-gradient(to bottom, #0d1520 0%, transparent 100%);
-}
-
-.export-mode .map-panel::after {
-  bottom: 0;
-  height: 560px;
-  background: linear-gradient(to top, #0d1520 0%, #0d1520 18%, rgba(13, 21, 32, 0.75) 45%, rgba(13, 21, 32, 0.3) 70%, transparent 100%);
-}
-
-.export-preview {
-  width: 100vw;
-  height: 100vh;
-  overflow: hidden;
-  background:
-    radial-gradient(circle at top, rgba(56, 189, 248, 0.16), transparent 34%),
-    #08111f;
-}
-
-.export-preview #app {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) scale(var(--export-preview-scale, 0.5));
-  transform-origin: center;
-  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.42);
-}
-
-.export-mode .export-card {
   position: absolute;
   inset: 0;
   z-index: 760;
@@ -388,12 +142,12 @@ button:hover {
   transition: opacity 550ms ease;
 }
 
-.export-mode .export-end-card {
+.export-end-card {
   transition: opacity 900ms ease;
 }
 
-.export-mode:not(.export-started) .export-title-card,
-.export-mode.export-ended .export-end-card {
+body:not(.export-started) .export-title-card,
+body.export-ended .export-end-card {
   opacity: 1;
 }
 
@@ -515,10 +269,6 @@ button:hover {
 }
 
 .export-activity-callout {
-  display: none;
-}
-
-.export-mode .export-activity-callout {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -553,8 +303,7 @@ button:hover {
   stroke: #7dd3fc;
 }
 
-
-.export-mode .export-stats {
+.export-stats {
   position: absolute;
   left: 50%;
   top: 260px; /* ponytail: clears Instagram's top chrome on a 1920-tall reel */
@@ -573,8 +322,8 @@ button:hover {
   backdrop-filter: blur(16px);
 }
 
-.export-mode:not(.export-started) .export-stats,
-.export-mode.export-ended .export-stats {
+body:not(.export-started) .export-stats,
+body.export-ended .export-stats {
   opacity: 0;
 }
 
@@ -605,18 +354,4 @@ button:hover {
 
 .export-stats #export-location {
   font-size: 2rem;
-}
-
-@media (max-width: 840px) {
-  #app {
-    grid-template-columns: 1fr;
-  }
-
-  .sidebar {
-    max-height: none;
-  }
-
-  .map-panel {
-    min-height: 65vh;
-  }
 }

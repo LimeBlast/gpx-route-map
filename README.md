@@ -53,7 +53,6 @@ MONTH=2025-04 npm run render:instagram
 | `FPS` | `30` | Output frame rate |
 | `FINAL_HOLD_SECONDS` | `2` | How long to hold on the final map before the stats card |
 | `END_HOLD_SECONDS` | `1.5` | How long to hold on the stats card |
-| `WIDTH` / `HEIGHT` | `1080` / `1920` | Output dimensions |
 | `OUTPUT` | `exports/monthly-YYYY-MM.mp4` | Output file path |
 | `VIDEO_TITLE` | `Month YYYY · Running & Cycling` | Title card heading |
 | `VIDEO_SUBTITLE` | `Every square unlocked, one activity at a time.` | Title card subheading |
@@ -65,12 +64,10 @@ Example:
 EXPORT_SPEED=15000 FINAL_HOLD_SECONDS=3 END_HOLD_SECONDS=2 npm run render:monthly
 ```
 
-### Preset formats
+### Quick draft
 
 ```sh
 npm run render:draft    # 15fps quick preview, saves to exports/draft-route-map.mp4
-npm run render:feed     # 4:5 feed format (1080×1350)
-npm run render:square   # square format (1080×1080)
 ```
 
 ### Custom Chrome path
@@ -117,7 +114,8 @@ To preview the map in a browser before rendering:
 npm run dev
 ```
 
-Open the local URL printed by Vite. Set your browser viewport to portrait (e.g. 1080×1920), enable Cinematic pan, and press Play.
+Open the local URL printed by Vite. The page renders exactly what the video will
+show — a 1080×1920 reel frame, scaled to fit the window — and plays automatically.
 
 ## Building Routes Only
 

@@ -31,8 +31,8 @@ const outputPath = path.resolve(
       : path.join(rootDir, "exports", "instagram-route-map.mp4"))
 );
 const fps = Number(process.env.FPS || 30);
-const width = Number(process.env.WIDTH || 1080);
-const height = Number(process.env.HEIGHT || 1920);
+const width = 1080;
+const height = 1920;
 const endHoldSeconds = Number(process.env.END_HOLD_SECONDS || 1.5);
 const frameLimit = Number(process.env.FRAME_LIMIT || 0);
 const progressIntervalMs = Number(process.env.PROGRESS_INTERVAL_MS || 2000);
@@ -42,10 +42,7 @@ const endHoldFrames = fps * endHoldSeconds;
 const maxRenderMinutes = Number(process.env.MAX_RENDER_MINUTES || 60);
 const cdpCommandTimeoutMs = Number(process.env.CDP_COMMAND_TIMEOUT_MS || 20_000);
 const exportParams = new URLSearchParams({
-  export: "1",
   speed: String(exportSpeed),
-  width: String(width),
-  height: String(height),
   title: process.env.VIDEO_TITLE || "Running & Cycling",
   subtitle: process.env.VIDEO_SUBTITLE || "Every square unlocked, one activity at a time.",
   kicker: process.env.VIDEO_KICKER || (monthDisplay || "Route Progress"),

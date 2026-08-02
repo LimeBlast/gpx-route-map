@@ -20,8 +20,6 @@ npm run build                   # build:routes + build:app
 
 MONTH=2026-04 npm run render:instagram   # target a specific month
 npm run render:draft            # 15fps quick preview
-npm run render:feed             # 4:5 format (1080×1350)
-npm run render:square           # square format (1080×1080)
 ```
 
 Key env vars for `render:monthly` / `render:instagram`:
@@ -58,7 +56,7 @@ Single-file vanilla JS app (no framework). Boots by fetching `routes.json`, then
 - Builds a 1km grid of `L.rectangle` cells over all route coordinates using Leaflet's Mercator projection
 - Plays back routes one by one in `tick()` → `revealRoute()` loop driven by `setTimeout`
 - On each reveal: pans camera (`focusPlaybackView`), waits for pan (`waitForCameraMove`), reveals grid cells, draws animated route trace via `requestAnimationFrame`
-- Export mode is activated by `?export=1` URL param; title/end cards are CSS overlays toggled by body classes (`export-started`, `export-ended`)
+- The page is always the 1080×1920 reel frame (scaled to fit smaller viewports); title/end cards are CSS overlays toggled by body classes (`export-started`, `export-ended`)
 - Exposes `window.routeProgressApp` with `play()`, `pause()`, `reset()`, `showEndCard()`, `state()` for the render script to drive
 
 Key timing constants (all in ms, all in `main.js` top-level scope):
@@ -80,4 +78,4 @@ Frame capture loop: receives `Page.screencastFrame` events, writes `.jpg` files,
 
 ### Browser preview
 
-`npm run dev` serves the app. Click **Story / Reel** in the sidebar to open a scaled 1080×1920 preview with autoplay. The preview derives the month label and title card text from the loaded `routes.json` at runtime — no URL params needed.
+`npm run dev` serves the same reel the renderer captures, scaled to fit the window, autoplaying (autoplay is gated on `import.meta.env.DEV`). Month label and title card text come from the loaded `routes.json` — no URL params needed. There are no interactive controls; the browser view exists only to see what the video will look like.

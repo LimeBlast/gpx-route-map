@@ -3,20 +3,9 @@ import "leaflet/dist/leaflet.css";
 import "./styles.css";
 
 const urlParams = new URLSearchParams(window.location.search);
-const isExportMode = urlParams.has("export");
-const isPreviewMode = urlParams.has("preview");
-const exportWidth = Number(urlParams.get("width") || 1080);
-const exportHeight = Number(urlParams.get("height") || 1920);
 
-if (isExportMode) {
-  applyExportDimensions();
-  document.body.classList.add("export-mode");
-}
-
-if (isPreviewMode) {
-  document.body.classList.add("export-preview");
-  updateExportPreviewScale();
-}
+const reelWidth = 1080;
+const reelHeight = 1920;
 
 const colors = {
   run: "#22c55e",
@@ -32,7 +21,6 @@ const traceColors = {
 };
 
 const gridCellMeters = 1000;
-const minimumRevealDelayMs = 350;
 const minimumTraceDurationMs = 800;
 const maximumTraceDurationMs = 2000;
 const postTraceHoldMs = 500;
@@ -41,12 +29,10 @@ const panDurationSeconds = 1.0;
 const finalOverviewDelayMs = 1400;
 const finalClusterRadiusCells = 14;
 const exportTitleDurationMs = Number(urlParams.get("titleMs") || 2800);
-const defaultExportSpeedMs = 5200;
-const defaultPreviewSpeedMs = 3600;
+const speedMs = Number(urlParams.get("speed") || 5200);
 
 const state = {
-  allRoutes: [],
-  filteredRoutes: [],
+  routes: [],
   gridCells: new Map(),
   cellLayers: new Map(),
   completedCells: new Map(),
@@ -57,16 +43,15 @@ const state = {
   routeAnimationFrame: null,
   routeAnimationToken: 0,
   timer: null,
-  routeLayers: [],
   routeHeadMarker: null
 };
 
+updatePreviewScale();
+
 const map = L.map("map", {
   zoomControl: false,
-  scrollWheelZoom: true
+  scrollWheelZoom: false
 }).setView([54.5, -3], 6);
-
-L.control.zoom({ position: "bottomright" }).addTo(map);
 
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 19,
@@ -85,24 +70,16 @@ map.createPane("headPane");
 map.getPane("headPane").style.zIndex = 440;
 map.getPane("headPane").style.pointerEvents = "none";
 
-const gridRenderer = isExportMode
-  ? L.canvas({ pane: "gridPane", padding: 1 })
-  : L.svg({ pane: "gridPane", padding: 1 });
+const gridRenderer = L.canvas({ pane: "gridPane", padding: 1 });
 const gridLayerGroup = L.layerGroup().addTo(map);
 const routeLayerGroup = L.layerGroup().addTo(map);
 
 const elements = {
-  activityFilter: document.querySelector("#activity-filter"),
-  cinematicPan: document.querySelector("#cinematic-pan"),
-  currentDate: document.querySelector("#current-date"),
-  currentLocation: document.querySelector("#current-location"),
   emptyState: document.querySelector("#empty-state"),
   exportCurrentDate: document.querySelector("#export-current-date"),
   exportLocation: document.querySelector("#export-location"),
-  activityCallout: document.querySelector("#export-activity-callout"),
   calloutIcon: document.querySelector("#callout-icon"),
   exportEndActivities: document.querySelector("#export-end-activities"),
-  exportEndCard: document.querySelector("#export-end-card"),
   exportEndRunDistance: document.querySelector("#export-end-run-distance"),
   exportEndRunCount: document.querySelector("#export-end-run-count"),
   exportEndRideDistance: document.querySelector("#export-end-ride-distance"),
@@ -113,18 +90,7 @@ const elements = {
   exportRouteCount: document.querySelector("#export-route-count"),
   exportSubtitle: document.querySelector("#export-subtitle"),
   exportTitle: document.querySelector("#export-title"),
-  exportTitleCard: document.querySelector("#export-title-card"),
-  exportTotalDistance: document.querySelector("#export-total-distance"),
-  instagramPreviewButtons: document.querySelectorAll(".instagram-preview-button"),
-  instagramCurrentSpeedButton: document.querySelector("#instagram-current-speed-button"),
-  playButton: document.querySelector("#play-button"),
-  resetButton: document.querySelector("#reset-button"),
-  routeCount: document.querySelector("#route-count"),
-  routeList: document.querySelector("#route-list"),
-  showRouteTrace: document.querySelector("#show-route-trace"),
-  speed: document.querySelector("#speed"),
-  timeline: document.querySelector("#timeline"),
-  totalDistance: document.querySelector("#total-distance")
+  exportTotalDistance: document.querySelector("#export-total-distance")
 };
 
 async function boot() {
@@ -136,33 +102,33 @@ async function boot() {
     }
 
     const data = await response.json();
-    state.allRoutes = Array.isArray(data.routes) ? data.routes : [];
-    state.allRoutes.sort((left, right) => new Date(left.date) - new Date(right.date));
-    state.allRoutes.forEach((route) => {
+    state.routes = Array.isArray(data.routes) ? data.routes : [];
+    state.routes.sort((left, right) => new Date(left.date) - new Date(right.date));
+    state.routes.forEach((route) => {
       route.segments = normalizedRouteSegments(route);
       route.cells = routeCellKeys(route);
     });
 
     await waitForMapLayout();
-    bindControls();
-    applyExportDefaults();
-    applyFilter();
-    const monthLabel = routesMonthLabel(state.allRoutes);
-    if (monthLabel) {
-      const sidebarTitle = document.querySelector("#sidebar-title");
-      if (sidebarTitle) sidebarTitle.textContent = `${monthLabel} · Running & Cycling`;
-    }
+    bindMapEvents();
+    applyCardText();
+    elements.emptyState.hidden = state.routes.length > 0;
+    buildGrid();
+    render();
+    fitAllRoutes();
     exposeAppControls();
-    applyAutoplay();
+
+    // ponytail: dev preview autoplays; the renderer drives play() itself
+    if (import.meta.env.DEV) window.setTimeout(play, 150);
   } catch (error) {
     console.error(error);
     elements.emptyState.hidden = false;
   }
 }
 
-function bindControls() {
+function bindMapEvents() {
   window.addEventListener("resize", () => {
-    updateExportPreviewScale();
+    updatePreviewScale();
     map.invalidateSize();
     refreshGridStyles();
   });
@@ -171,73 +137,11 @@ function bindControls() {
   map.on("zoomend moveend", () => {
     window.setTimeout(refreshGridStyles, 60);
   });
-
-  elements.activityFilter.addEventListener("change", () => {
-    pause();
-    applyFilter();
-  });
-
-  elements.timeline.addEventListener("input", () => {
-    pause();
-    state.index = Number(elements.timeline.value);
-    render();
-  });
-
-  elements.playButton.addEventListener("click", () => {
-    state.isPlaying ? pause() : play();
-  });
-
-  elements.resetButton.addEventListener("click", () => {
-    pause();
-    state.index = -1;
-    render();
-    fitAllRoutes();
-  });
-
-  elements.instagramPreviewButtons.forEach((button) => {
-    button.addEventListener("click", () => {
-      openInstagramPreview({
-        height: Number(button.dataset.height),
-        speed: defaultPreviewSpeedMs,
-        width: Number(button.dataset.width)
-      });
-    });
-  });
-
-  elements.instagramCurrentSpeedButton.addEventListener("click", () => {
-    openInstagramPreview({
-      height: exportHeight,
-      speed: Number(elements.speed.value),
-      width: exportWidth
-    });
-  });
-
-  elements.showRouteTrace.addEventListener("change", render);
 }
 
-function openInstagramPreview({ height, speed, width }) {
-  const previewUrl = new URL(window.location.href);
-  previewUrl.searchParams.set("export", "1");
-  previewUrl.searchParams.set("preview", "1");
-  previewUrl.searchParams.set("autoplay", "1");
-  previewUrl.searchParams.set("speed", String(speed));
-  previewUrl.searchParams.set("width", String(width));
-  previewUrl.searchParams.set("height", String(height));
-  previewUrl.searchParams.delete("activity");
-
-  window.open(previewUrl.toString(), "_blank", "noopener,noreferrer");
-}
-
-function applyExportDimensions() {
-  document.documentElement.style.setProperty("--export-width", `${exportWidth}px`);
-  document.documentElement.style.setProperty("--export-height", `${exportHeight}px`);
-}
-
-function updateExportPreviewScale() {
-  if (!isPreviewMode) return;
-
-  const scale = Math.min(window.innerWidth / exportWidth, window.innerHeight / exportHeight);
-  document.documentElement.style.setProperty("--export-preview-scale", String(scale));
+function updatePreviewScale() {
+  const scale = Math.min(window.innerWidth / reelWidth, window.innerHeight / reelHeight, 1);
+  document.documentElement.style.setProperty("--reel-scale", String(scale));
 }
 
 function routesMonthLabel(routes) {
@@ -245,41 +149,12 @@ function routesMonthLabel(routes) {
   return new Date(routes[0].date).toLocaleString("en-GB", { month: "long", year: "numeric" });
 }
 
-function applyExportDefaults() {
-  if (!isExportMode) return;
+function applyCardText() {
+  const monthLabel = routesMonthLabel(state.routes);
 
-  const monthLabel = routesMonthLabel(state.allRoutes);
-  const speedValue = Number(urlParams.get("speed") || (isPreviewMode ? defaultPreviewSpeedMs : defaultExportSpeedMs));
-  elements.speed.max = String(Math.max(speedValue, Number(elements.speed.max)));
-  elements.speed.value = String(speedValue);
   elements.exportTitle.textContent = urlParams.get("title") || "Running & Cycling";
   elements.exportSubtitle.textContent = urlParams.get("subtitle") || "Every square unlocked, one activity at a time.";
   elements.exportKicker.textContent = urlParams.get("kicker") || monthLabel || "Route Progress";
-}
-
-function applyAutoplay() {
-  if (!urlParams.has("autoplay")) return;
-
-  window.setTimeout(play, 150);
-}
-
-function applyFilter() {
-  const activity = elements.activityFilter.value;
-
-  state.filteredRoutes = activity === "all"
-    ? state.allRoutes
-    : state.allRoutes.filter((route) => route.type === activity);
-
-  state.index = clampTimelineIndex(state.index);
-  state.cameraTargetKey = "";
-  elements.timeline.min = "-1";
-  elements.timeline.max = Math.max(state.filteredRoutes.length - 1, 0);
-  elements.timeline.disabled = state.filteredRoutes.length === 0;
-  elements.emptyState.hidden = state.filteredRoutes.length > 0;
-
-  buildGrid();
-  render();
-  fitAllRoutes();
 }
 
 function exposeAppControls() {
@@ -287,7 +162,8 @@ function exposeAppControls() {
     play,
     pause,
     showEndCard() {
-      showExportEndCard();
+      updateExportEndCard();
+      document.body.classList.add("export-ended");
     },
     reset() {
       pause();
@@ -300,9 +176,9 @@ function exposeAppControls() {
       return {
         index: state.index,
         isEnded: document.body.classList.contains("export-ended"),
-        isComplete: state.index >= state.filteredRoutes.length - 1,
+        isComplete: state.index >= state.routes.length - 1,
         isPlaying: state.isPlaying,
-        routeCount: state.filteredRoutes.length
+        routeCount: state.routes.length
       };
     }
   };
@@ -311,19 +187,18 @@ function exposeAppControls() {
 }
 
 function play() {
-  if (state.filteredRoutes.length === 0) return;
+  if (state.routes.length === 0) return;
 
   state.isPlaying = true;
   document.body.classList.remove("export-ended");
-  elements.playButton.textContent = "Pause";
 
-  if (state.index >= state.filteredRoutes.length - 1) {
+  if (state.index >= state.routes.length - 1) {
     state.index = -1;
     render();
     fitAllRoutes();
   }
 
-  if (isExportMode && state.index === -1 && !document.body.classList.contains("export-started")) {
+  if (state.index === -1 && !document.body.classList.contains("export-started")) {
     document.body.classList.add("export-started");
     state.timer = window.setTimeout(tick, exportTitleDurationMs);
   } else {
@@ -332,16 +207,12 @@ function play() {
   }
 }
 
-function clampTimelineIndex(index) {
-  return Math.min(Math.max(index, -1), Math.max(state.filteredRoutes.length - 1, -1));
-}
-
 function tick() {
   if (!state.isPlaying) return;
 
   hideActivityCallout();
 
-  if (state.index >= state.filteredRoutes.length - 1) {
+  if (state.index >= state.routes.length - 1) {
     state.timer = window.setTimeout(() => {
       if (!state.isPlaying) return;
 
@@ -355,14 +226,14 @@ function tick() {
   const nextIndex = state.index + 1;
   clearRouteLayers();
   const cameraMoved = focusPlaybackView(nextIndex);
-  const followUpDelayMs = postRevealDelayMs();
+  const followUpDelayMs = traceDurationMs() + Math.max(speedMs * 0.2, postTraceHoldMs);
 
   const revealRoute = () => {
     if (!state.isPlaying) return;
 
     state.index = nextIndex;
     render();
-    showActivityCallout(state.filteredRoutes[nextIndex]);
+    showActivityCallout(state.routes[nextIndex]);
 
     state.timer = window.setTimeout(tick, followUpDelayMs);
   };
@@ -387,23 +258,7 @@ function showFinalOverview() {
 
 function pause() {
   state.isPlaying = false;
-  elements.playButton.textContent = "Play";
   window.clearTimeout(state.timer);
-}
-
-function showExportEndCard() {
-  if (!isExportMode) return;
-
-  updateExportEndCard();
-  document.body.classList.add("export-ended");
-}
-
-function postRevealDelayMs() {
-  if (elements.showRouteTrace.checked) {
-    return traceDurationMs() + Math.max(Number(elements.speed.value) * 0.2, postTraceHoldMs);
-  }
-
-  return Math.max(Number(elements.speed.value) * 0.45, minimumRevealDelayMs);
 }
 
 function waitForMapLayout() {
@@ -436,43 +291,36 @@ function waitForCameraMove(callback) {
 function render() {
   clearRouteLayers();
 
-  const visibleRoutes = state.filteredRoutes.slice(0, state.index + 1);
+  const visibleRoutes = state.routes.slice(0, state.index + 1);
   const latestRoute = visibleRoutes.at(-1);
   const previousRoutes = latestRoute ? visibleRoutes.slice(0, -1) : visibleRoutes;
   const visibleDistance = visibleRoutes.reduce((sum, route) => sum + route.distanceKm, 0);
-  const completedCells = latestRoute && elements.showRouteTrace.checked
-    ? completedCellMap(previousRoutes)
-    : completedCellMap(visibleRoutes);
+  const completedCells = completedCellMap(previousRoutes);
 
   state.completedCells = completedCells;
   renderGrid(completedCells);
-  if (latestRoute && elements.showRouteTrace.checked) {
+
+  if (latestRoute) {
     renderAnimatedRouteTrace(latestRoute, completedCells);
   }
 
-  elements.routeCount.textContent = String(completedCells.size);
-  elements.totalDistance.textContent = `${visibleDistance.toFixed(1)} km`;
-  elements.currentDate.textContent = latestRoute ? formatDate(latestRoute.date) : "—";
-  elements.currentLocation.textContent = latestRoute?.location || "—";
   elements.exportRouteCount.textContent = String(completedCells.size);
   elements.exportTotalDistance.textContent = `${visibleDistance.toFixed(1)} km`;
   elements.exportCurrentDate.textContent = latestRoute ? formatDate(latestRoute.date) : "—";
   elements.exportLocation.textContent = latestRoute?.location || "—";
   updateExportEndCard();
-  elements.timeline.value = String(state.index);
-  renderRouteList(visibleRoutes, latestRoute);
 }
 
 function updateExportEndCard() {
-  const visibleRoutes = state.filteredRoutes.slice(0, Math.max(state.index + 1, 0));
-  const routeSource = visibleRoutes.length > 0 ? visibleRoutes : state.filteredRoutes;
-  const completedCells = visibleRoutes.length > 0 ? state.completedCells : allCellMap(state.filteredRoutes);
+  const visibleRoutes = state.routes.slice(0, Math.max(state.index + 1, 0));
+  const routeSource = visibleRoutes.length > 0 ? visibleRoutes : state.routes;
+  const completedCells = visibleRoutes.length > 0 ? state.completedCells : allCellMap(state.routes);
   const runs = routeSource.filter((route) => route.type === "run");
   const rides = routeSource.filter((route) => route.type === "ride");
   const runDistance = runs.reduce((sum, route) => sum + route.distanceKm, 0);
   const rideDistance = rides.reduce((sum, route) => sum + route.distanceKm, 0);
 
-  elements.exportEndTitle.textContent = urlParams.get("endTitle") || routesMonthLabel(state.allRoutes) || "Progress unlocked";
+  elements.exportEndTitle.textContent = urlParams.get("endTitle") || routesMonthLabel(state.routes) || "Progress unlocked";
   elements.exportEndActivities.textContent = String(routeSource.length);
   elements.exportEndSquares.textContent = String(completedCells.size);
   elements.exportEndRunDistance.textContent = `${runDistance.toFixed(1)} km`;
@@ -482,22 +330,16 @@ function updateExportEndCard() {
 }
 
 function updateVisibleSquareCounts(completedCells) {
-  elements.routeCount.textContent = String(completedCells.size);
   elements.exportRouteCount.textContent = String(completedCells.size);
   updateExportEndCard();
 }
 
 function updateVisibleDistance(distanceKm) {
-  const text = `${distanceKm.toFixed(1)} km`;
-  elements.totalDistance.textContent = text;
-  elements.exportTotalDistance.textContent = text;
+  elements.exportTotalDistance.textContent = `${distanceKm.toFixed(1)} km`;
 }
 
 function focusPlaybackView(targetIndex = state.index) {
-  if (!elements.cinematicPan.checked || state.filteredRoutes.length === 0) return false;
-
-  const visibleRoutes = state.filteredRoutes.slice(0, targetIndex + 1);
-  const latestRoute = visibleRoutes.at(-1);
+  const latestRoute = state.routes[targetIndex];
 
   if (!latestRoute) return false;
 
@@ -514,10 +356,7 @@ function moveToBounds(bounds, options = {}) {
   state.cameraTargetKey = options.key || "";
   map.stop();
 
-  const padding = options.padding || (isExportMode
-    ? { topLeft: [72, 240], bottomRight: [72, 420] }
-    : { topLeft: [72, 72], bottomRight: [72, 72] });
-
+  const padding = options.padding || { topLeft: [72, 240], bottomRight: [72, 420] };
   const paddingTopLeft = Array.isArray(padding) ? padding : padding.topLeft;
   const paddingBottomRight = Array.isArray(padding) ? padding : padding.bottomRight;
   const zoomPadding = [
@@ -545,21 +384,6 @@ function moveToBounds(bounds, options = {}) {
   return true;
 }
 
-function renderRouteList(visibleRoutes, latestRoute) {
-  elements.routeList.replaceChildren(
-    ...visibleRoutes.slice(-8).reverse().map((route) => {
-      const item = document.createElement("li");
-      item.className = latestRoute?.id === route.id ? "active" : "";
-      item.innerHTML = `
-        <span class="route-type ${route.type}">${route.type}</span>
-        <span class="route-name">${escapeHtml(route.name)}</span>
-        <span class="route-meta">${formatDate(route.date)} · ${route.distanceKm.toFixed(1)} km</span>
-      `;
-      return item;
-    })
-  );
-}
-
 function clearRouteLayers() {
   if (state.routeAnimationFrame) {
     cancelAnimationFrame(state.routeAnimationFrame);
@@ -568,7 +392,6 @@ function clearRouteLayers() {
   state.routeAnimationFrame = null;
   state.routeAnimationToken += 1;
   routeLayerGroup.clearLayers();
-  state.routeLayers = [];
   removeRouteHeadMarker();
 }
 
@@ -633,7 +456,7 @@ function drawRouteProgress(route, color, targetDistanceMeters, baseCompletedCell
   renderGrid(completedCells);
   updateVisibleSquareCounts(completedCells);
   updateVisibleDistance(
-    state.filteredRoutes.slice(0, state.index).reduce((sum, r) => sum + r.distanceKm, 0) +
+    state.routes.slice(0, state.index).reduce((sum, r) => sum + r.distanceKm, 0) +
       targetDistanceMeters / 1000
   );
 
@@ -660,7 +483,7 @@ function drawRouteProgress(route, color, targetDistanceMeters, baseCompletedCell
     }
   }
 
-  const layer = L.polyline(visibleSegments, {
+  L.polyline(visibleSegments, {
     color,
     opacity: 1,
     pane: "routePane",
@@ -668,9 +491,6 @@ function drawRouteProgress(route, color, targetDistanceMeters, baseCompletedCell
     lineCap: "round",
     lineJoin: "round"
   }).addTo(routeLayerGroup);
-
-  layer.bindPopup(popupFor(route));
-  state.routeLayers = [layer];
 }
 
 function removeRouteHeadMarker() {
@@ -681,10 +501,7 @@ function removeRouteHeadMarker() {
 }
 
 function traceDurationMs() {
-  return Math.min(
-    Math.max(Math.round(Number(elements.speed.value) * 0.72), minimumTraceDurationMs),
-    maximumTraceDurationMs
-  );
+  return Math.min(Math.max(Math.round(speedMs * 0.72), minimumTraceDurationMs), maximumTraceDurationMs);
 }
 
 function segmentDistanceMeters(segment) {
@@ -741,26 +558,6 @@ function fitAllRoutes() {
   }
 }
 
-function routesBounds(routes) {
-  const bounds = L.latLngBounds([]);
-
-  routes.forEach((route) => bounds.extend(routeBounds(route)));
-
-  return bounds;
-}
-
-function routeBounds(route) {
-  const bounds = L.latLngBounds([]);
-
-  route.segments.forEach((segment) => {
-    segment.forEach((point) => {
-      bounds.extend(point);
-    });
-  });
-
-  return bounds;
-}
-
 function cellKeysBounds(cellKeys) {
   const bounds = L.latLngBounds([]);
 
@@ -813,7 +610,7 @@ function densestClusterBounds() {
 
 function buildGrid() {
   gridLayerGroup.clearLayers();
-  state.gridCells = allCellMap(state.filteredRoutes);
+  state.gridCells = allCellMap(state.routes);
   state.cellLayers = new Map();
 
   for (const [key, cell] of state.gridCells) {
@@ -1040,29 +837,12 @@ function cellBounds(cell) {
   return L.latLngBounds(southWest, northEast);
 }
 
-function popupFor(route) {
-  return `
-    <strong>${escapeHtml(route.name)}</strong><br />
-    ${formatDate(route.date)}<br />
-    ${route.type} · ${route.distanceKm.toFixed(1)} km
-  `;
-}
-
 function formatDate(value) {
   return new Intl.DateTimeFormat(undefined, {
     year: "numeric",
     month: "short",
     day: "numeric"
   }).format(new Date(value));
-}
-
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
 }
 
 function haversineMeters(left, right) {
