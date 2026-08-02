@@ -44,8 +44,8 @@ for (const file of files) {
   const distanceKm = segments.reduce((sum, segment) => sum + distanceInKm(segment), 0);
   const type = activityOverrides[file] || route.type || inferType(file, route.name);
 
-  if (!["run", "ride"].includes(type)) {
-    console.warn(`Skipping ${file}: not a run or ride`);
+  if (!["run", "ride", "walk"].includes(type)) {
+    console.warn(`Skipping ${file}: not a run, ride or walk`);
     continue;
   }
 
@@ -413,7 +413,9 @@ function fitFieldName(globalMessageNumber, fieldNumber) {
 function sportName(value) {
   return {
     1: "run",
-    2: "ride"
+    2: "ride",
+    11: "walk",
+    17: "walk" // hiking counts as walking
   }[value] || "";
 }
 
@@ -448,6 +450,7 @@ function inferType(file, name, sport = "") {
 
   if (/\b(run|running|jog|jogging)\b/.test(value)) return "run";
   if (/\b(ride|riding|bike|biking|cycle|cycling|cyclist|bicycle)\b/.test(value)) return "ride";
+  if (/\b(walk|walking|hike|hiking|ramble|rambling|trek|trekking)\b/.test(value)) return "walk";
 
   return "other";
 }

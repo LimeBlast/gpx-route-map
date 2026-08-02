@@ -16,7 +16,8 @@
           <div class="export-legend" aria-label="Map legend">
             <span><i class="legend-run"></i> Runs</span>
             <span><i class="legend-ride"></i> Rides</span>
-            <span><i class="legend-mixed"></i> Both</span>
+            <span><i class="legend-walk"></i> Walks</span>
+            <span><i class="legend-mixed"></i> Mixed</span>
           </div>
         </section>
         <section id="export-end-card" class="export-card export-end-card" aria-label="Export ending card" hidden>
@@ -31,15 +32,20 @@
               <span>Squares</span>
               <strong id="export-end-squares">0</strong>
             </div>
-            <div class="export-end-type-run">
+            <div class="export-end-type-run" data-activity-tile="run">
               <span>Running</span>
               <strong id="export-end-run-distance">0 km</strong>
               <em id="export-end-run-count">0 runs</em>
             </div>
-            <div class="export-end-type-ride">
+            <div class="export-end-type-ride" data-activity-tile="ride">
               <span>Cycling</span>
               <strong id="export-end-ride-distance">0 km</strong>
               <em id="export-end-ride-count">0 rides</em>
+            </div>
+            <div class="export-end-type-walk" data-activity-tile="walk">
+              <span>Walking</span>
+              <strong id="export-end-walk-distance">0 km</strong>
+              <em id="export-end-walk-count">0 walks</em>
             </div>
           </div>
         </section>

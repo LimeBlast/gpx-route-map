@@ -43,7 +43,7 @@ MONTH=2025-04 npm run render:instagram
 1. **Title card** — month name, subtitle, and a run/ride/mixed legend
 2. **Route playback** — the camera pans to each activity, then its squares fill in with a route trace
 3. **Final overview** — the camera flies to the densest activity area and holds
-4. **Stats card** — month name as heading, with activity count, squares filled, and separate running and cycling distances
+4. **Stats card** — month name as heading, with activity count, squares filled, and separate running, cycling and walking distances
 
 ### Tuning the render
 
@@ -80,12 +80,12 @@ CHROME_PATH="/path/to/chrome" npm run render:monthly
 
 - The map starts as a grey basemap with a 1km grid over every square touched by the month's activities.
 - Completed squares fill with colour as activities play back chronologically.
-- Runs are green, rides are blue, and mixed squares are purple.
+- Runs are green, rides are blue, walks are amber, and mixed squares are purple.
 - Squares become more intense as more activities pass through them.
 - The camera pans cinematically to each activity before its squares are revealed.
 - After the camera settles, the current route trace draws across the map.
 - After all routes, the camera flies to the densest cluster of activity and holds.
-- The stats card fades in showing the month, total activities, squares filled, and separate run and cycling distances.
+- The stats card fades in showing the month, total activities, squares filled, and separate run, cycling and walking distances.
 
 ## Activity Types
 
@@ -93,10 +93,11 @@ The build script only includes activities classified as:
 
 - `run` — filename or activity name contains words like `run` or `running`
 - `ride` — filename or activity name contains words like `ride`, `bike`, or `cycling`
+- `walk` — filename or activity name contains words like `walk`, `hike`, or `trek` (hikes are treated as walks)
 
 Anything else is skipped. For FIT files, the script also reads the FIT sport metadata when available.
 
-If an activity is misclassified, copy `activity-overrides.example.json` to `activity-overrides.json` and map exact filenames to `run` or `ride`.
+If an activity is misclassified, copy `activity-overrides.example.json` to `activity-overrides.json` and map exact filenames to `run`, `ride` or `walk`.
 
 ## Privacy Trimming
 

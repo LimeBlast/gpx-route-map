@@ -212,6 +212,10 @@ body.export-ended .export-end-card {
   background: #38bdf8;
 }
 
+.legend-walk {
+  background: #f59e0b;
+}
+
 .legend-mixed {
   background: #a855f7;
 }
@@ -231,6 +235,11 @@ body.export-ended .export-end-card {
   background: rgba(15, 23, 42, 0.74);
   border: 1px solid rgba(226, 232, 240, 0.2);
   border-radius: 1.4rem;
+}
+
+/* .export-end-grid div sets display, which would otherwise beat [hidden] */
+.export-end-grid div[hidden] {
+  display: none;
 }
 
 .export-end-grid span {
@@ -263,9 +272,19 @@ body.export-ended .export-end-card {
   color: #7dd3fc;
 }
 
+.export-end-type-walk span {
+  color: #fcd34d;
+}
+
 .export-end-type-run strong,
-.export-end-type-ride strong {
+.export-end-type-ride strong,
+.export-end-type-walk strong {
   font-size: 2.5rem;
+}
+
+/* An odd number of activity tiles: the last one spans the full row */
+.export-end-grid div[data-activity-tile]:last-of-type:nth-of-type(odd) {
+  grid-column: span 2;
 }
 
 .export-activity-callout {
@@ -301,6 +320,10 @@ body.export-ended .export-end-card {
 
 .callout-icon.ride svg {
   stroke: #7dd3fc;
+}
+
+.callout-icon.walk svg {
+  stroke: #fcd34d;
 }
 
 .export-stats {

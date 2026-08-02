@@ -10,6 +10,7 @@ const reelHeight = 1920;
 const colors = {
   run: "#22c55e",
   ride: "#38bdf8",
+  walk: "#f59e0b",
   other: "#f97316",
   mixed: "#a855f7"
 };
@@ -17,6 +18,7 @@ const colors = {
 const traceColors = {
   run: "#14532d",
   ride: "#075985",
+  walk: "#78350f",
   other: "#7c2d12"
 };
 
@@ -84,6 +86,9 @@ const elements = {
   exportEndRunCount: document.querySelector("#export-end-run-count"),
   exportEndRideDistance: document.querySelector("#export-end-ride-distance"),
   exportEndRideCount: document.querySelector("#export-end-ride-count"),
+  exportEndWalkDistance: document.querySelector("#export-end-walk-distance"),
+  exportEndWalkCount: document.querySelector("#export-end-walk-count"),
+  exportEndTiles: document.querySelectorAll("[data-activity-tile]"),
   exportEndSquares: document.querySelector("#export-end-squares"),
   exportEndTitle: document.querySelector("#export-end-title"),
   exportKicker: document.querySelector("#export-kicker"),
@@ -156,9 +161,20 @@ function routesMonthLabel(routes) {
 function applyCardText() {
   const monthLabel = routesMonthLabel(state.routes);
 
-  elements.exportTitle.textContent = urlParams.get("title") || "Running & Cycling";
+  elements.exportTitle.textContent = urlParams.get("title") || activityTitle();
   elements.exportSubtitle.textContent = urlParams.get("subtitle") || "Every square unlocked, one activity at a time.";
   elements.exportKicker.textContent = urlParams.get("kicker") || monthLabel || "Route Progress";
+}
+
+// Title card names only the activity types the month actually contains
+function activityTitle() {
+  const names = { run: "Running", ride: "Cycling", walk: "Walking" };
+  const present = Object.keys(names).filter((type) => state.routes.some((route) => route.type === type));
+
+  if (present.length === 0) return "Route Progress";
+
+  const labels = present.map((type) => names[type]);
+  return labels.length === 1 ? labels[0] : `${labels.slice(0, -1).join(", ")} & ${labels.at(-1)}`;
 }
 
 function exposeAppControls() {
@@ -321,8 +337,10 @@ function updateExportEndCard() {
   const completedCells = visibleRoutes.length > 0 ? state.completedCells : allCellMap(state.routes);
   const runs = routeSource.filter((route) => route.type === "run");
   const rides = routeSource.filter((route) => route.type === "ride");
+  const walks = routeSource.filter((route) => route.type === "walk");
   const runDistance = runs.reduce((sum, route) => sum + route.distanceKm, 0);
   const rideDistance = rides.reduce((sum, route) => sum + route.distanceKm, 0);
+  const walkDistance = walks.reduce((sum, route) => sum + route.distanceKm, 0);
 
   elements.exportEndTitle.textContent = urlParams.get("endTitle") || routesMonthLabel(state.routes) || "Progress unlocked";
   elements.exportEndActivities.textContent = String(routeSource.length);
@@ -331,6 +349,14 @@ function updateExportEndCard() {
   elements.exportEndRunCount.textContent = `${runs.length} ${runs.length === 1 ? "run" : "runs"}`;
   elements.exportEndRideDistance.textContent = `${rideDistance.toFixed(1)} km`;
   elements.exportEndRideCount.textContent = `${rides.length} ${rides.length === 1 ? "ride" : "rides"}`;
+  elements.exportEndWalkDistance.textContent = `${walkDistance.toFixed(1)} km`;
+  elements.exportEndWalkCount.textContent = `${walks.length} ${walks.length === 1 ? "walk" : "walks"}`;
+
+  // Months without a given activity shouldn't show an empty 0 km tile
+  const counts = { run: runs.length, ride: rides.length, walk: walks.length };
+  elements.exportEndTiles.forEach((tile) => {
+    tile.hidden = counts[tile.dataset.activityTile] === 0;
+  });
 }
 
 function updateVisibleSquareCounts(completedCells) {
@@ -871,7 +897,8 @@ function toRadians(degrees) {
 
 const activityIcons = {
   run: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 10.42 4.8-5.07"/><path d="M19 18h3"/><path d="M9.5 22 21.414 9.415A2 2 0 0 0 21.2 6.4l-5.61-4.208A1 1 0 0 0 14 3v2a2 2 0 0 1-1.394 1.906L8.677 8.053A1 1 0 0 0 8 9c-.155 6.393-2.082 9-4 9a2 2 0 0 0 0 4h14"/></svg>`,
-  ride: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/></svg>`
+  ride: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/></svg>`,
+  walk: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z"/><path d="M20 20v-2.38c0-1.12 1.03-2.12 1-4.62-.03-2.72-1.49-6-4.5-6C14.63 7 14 8.8 14 10.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z"/><path d="M16 17h4"/><path d="M4 13h4"/></svg>`
 };
 
 function showActivityCallout(route) {

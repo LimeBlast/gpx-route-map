@@ -47,7 +47,7 @@ exports/monthly-YYYY-MM.mp4
 
 ### scripts/build-routes.mjs
 
-Pure Node.js. Reads all `.fit` and `.gpx` files from `gpx/`, classifies each as `run` or `ride` (by filename, activity name, or FIT sport metadata), optionally filters to a single month (`MONTH=YYYY-MM`), trims start/end for privacy (`TRIM_METERS`), and writes `public/routes.json`. Contains a hand-rolled FIT binary parser — no external FIT library.
+Pure Node.js. Reads all `.fit` and `.gpx` files from `gpx/`, classifies each as `run`, `ride` or `walk` (by filename, activity name, or FIT sport metadata), optionally filters to a single month (`MONTH=YYYY-MM`), trims start/end for privacy (`TRIM_METERS`), and writes `public/routes.json`. Contains a hand-rolled FIT binary parser — no external FIT library.
 
 ### src/main.js
 
@@ -74,7 +74,13 @@ Frame capture loop: receives `Page.screencastFrame` events, writes `.jpg` files,
 
 ### Activity type detection
 
-`run` if filename/activity name matches `\b(run|running|jog|jogging)\b`; `ride` if it matches `\b(ride|riding|bike|biking|cycle|cycling|cyclist|bicycle)\b`. Override per-file via `activity-overrides.json` (copy from `activity-overrides.example.json`).
+Three types are kept — `run`, `ride`, `walk` — matched against filename, activity name, and FIT sport metadata:
+
+- `run` — `\b(run|running|jog|jogging)\b`
+- `ride` — `\b(ride|riding|bike|biking|cycle|cycling|cyclist|bicycle)\b`
+- `walk` — `\b(walk|walking|hike|hiking|ramble|rambling|trek|trekking)\b` (hikes are treated as walks)
+
+FIT sport enums map `1 → run`, `2 → ride`, `11`/`17 → walk`. Anything else is skipped. Override per-file via `activity-overrides.json` (copy from `activity-overrides.example.json`).
 
 ### Browser preview
 
