@@ -385,6 +385,19 @@ body.dev-chrome .ig-chrome {
   letter-spacing: 0.1em;
 }
 
+.ig-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 46px 46px 0;
+}
+
+.ig-topbar svg {
+  width: 66px;
+  height: 66px;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.55));
+}
+
 .ig-rail {
   position: absolute;
   right: 34px;

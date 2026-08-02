@@ -9,3 +9,4 @@ activity-overrides.json
 .geocode-cache.json
 .DS_Store
 logs/
+.playwright-mcp/
