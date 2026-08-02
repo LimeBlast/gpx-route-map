@@ -66,9 +66,17 @@ await run("npm", ["run", "build:routes"], month ? { MONTH: month } : {});
 await run("npm", ["run", "build:app"]);
 
 // Without MONTH the filename comes from the data itself, so an unfiltered
-// render of one month's files still lands on monthly-YYYY-MM.mp4
+// render of one month's files still lands on monthly-YYYY-MM.mp4.
+// RENDER_LABEL suffixes the name so alternative basemaps can be rendered
+// side by side without overwriting each other.
+const renderLabel = process.env.RENDER_LABEL ?? "protomaps";
 const outputPath = path.resolve(
-  process.env.OUTPUT || path.join(rootDir, "exports", `monthly-${month || (await renderedMonth())}.mp4`)
+  process.env.OUTPUT ||
+    path.join(
+      rootDir,
+      "exports",
+      `monthly-${month || (await renderedMonth())}${renderLabel ? `-${renderLabel}` : ""}.mp4`
+    )
 );
 await mkdir(path.dirname(outputPath), { recursive: true });
 await warmTileCache();
