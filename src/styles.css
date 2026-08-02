@@ -331,15 +331,17 @@ body.export-ended .export-end-card {
 }
 
 /* Cumulative swim distance for the month, filling as each swim plays.
-   Sits above the swim card so it can be seen rising during a swim. */
+   Sits under the stats bar, above the swim card so it can be seen rising. */
 .swim-meter {
   position: absolute;
-  left: 44px;
-  top: 470px;
+  left: 50%;
+  top: 400px;
   z-index: 780;
-  display: grid;
-  justify-items: center;
-  gap: 0.7rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  width: calc(100% - 96px);
+  transform: translateX(-50%);
   pointer-events: none;
 }
 
@@ -347,48 +349,60 @@ body.export-ended .export-end-card {
   display: none;
 }
 
-.swim-meter-tube {
+.swim-meter-track {
   position: relative;
-  width: 58px;
-  height: 880px;
-  overflow: hidden;
-  background: rgba(8, 32, 46, 0.55);
-  border: 2px solid rgba(165, 243, 252, 0.45);
+  flex: 1;
+  height: 26px;
+  background: rgba(8, 32, 46, 0.72);
+  border: 1px solid rgba(165, 243, 252, 0.35);
   border-radius: 999px;
-  box-shadow: 0 12px 40px rgba(3, 20, 32, 0.5), inset 0 0 20px rgba(3, 20, 32, 0.6);
-  backdrop-filter: blur(6px);
+  box-shadow: 0 10px 30px rgba(3, 20, 32, 0.45);
+  backdrop-filter: blur(10px);
 }
 
 .swim-meter-fill {
   position: absolute;
   left: 0;
-  right: 0;
+  top: 0;
   bottom: 0;
-  height: 0;
-  background: linear-gradient(180deg, #67e8f9 0%, #22d3ee 30%, #0891b2 100%);
+  width: 0;
+  background: linear-gradient(90deg, #0891b2 0%, #22d3ee 70%, #67e8f9 100%);
   border-radius: 999px;
-  box-shadow: 0 0 22px rgba(34, 211, 238, 0.55);
+  box-shadow: 0 0 18px rgba(34, 211, 238, 0.5);
 }
 
-/* Meniscus: a paler band at the waterline */
-.swim-meter-fill::after {
-  content: "";
+/* Swimmer rides the leading edge of the water */
+.swim-meter-swimmer {
   position: absolute;
   left: 0;
-  right: 0;
-  top: 0;
-  height: 10px;
-  background: #cffafe;
-  border-radius: 999px;
+  top: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  height: 58px;
+  color: #67e8f9;
+  background: rgba(3, 20, 32, 0.92);
+  border: 2px solid #67e8f9;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 18px rgba(34, 211, 238, 0.55);
 }
 
-.swim-meter span {
-  padding: 0.35rem 0.7rem;
+.swim-meter-swimmer svg {
+  width: 34px;
+  height: 34px;
+}
+
+.swim-meter span#swim-meter-label {
+  min-width: 150px;
+  padding: 0.3rem 0.7rem;
   color: #a5f3fc;
-  font-size: 1.5rem;
+  font-size: 1.4rem;
   font-weight: 900;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.06em;
+  text-align: center;
   background: rgba(3, 20, 32, 0.8);
   border: 1px solid rgba(165, 243, 252, 0.3);
   border-radius: 999px;

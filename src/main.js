@@ -106,6 +106,7 @@ const elements = {
   swimMeter: document.querySelector("#swim-meter"),
   swimMeterFill: document.querySelector("#swim-meter-fill"),
   swimMeterLabel: document.querySelector("#swim-meter-label"),
+  swimMeterSwimmer: document.querySelector("#swim-meter-swimmer"),
   swimDate: document.querySelector("#swim-date"),
   swimLanes: document.querySelector("#swim-lanes"),
   swimLengths: document.querySelector("#swim-lengths"),
@@ -300,7 +301,10 @@ function landDistanceKm(routes) {
 
 function setSwimMeter(metres) {
   const fraction = state.swimMetresTotal > 0 ? metres / state.swimMetresTotal : 0;
-  elements.swimMeterFill.style.height = `${(fraction * 100).toFixed(2)}%`;
+  const percent = `${(fraction * 100).toFixed(2)}%`;
+  elements.swimMeterFill.style.width = percent;
+  // Keep the badge inside the track at both ends
+  elements.swimMeterSwimmer.style.left = `clamp(29px, ${percent}, calc(100% - 29px))`;
   elements.swimMeterLabel.textContent = `${Math.round(metres).toLocaleString()} m`;
 }
 
