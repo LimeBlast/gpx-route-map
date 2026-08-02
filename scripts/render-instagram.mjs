@@ -43,7 +43,7 @@ const maxRenderMinutes = Number(process.env.MAX_RENDER_MINUTES || 60);
 const cdpCommandTimeoutMs = Number(process.env.CDP_COMMAND_TIMEOUT_MS || 20_000);
 const exportParams = new URLSearchParams({
   speed: String(exportSpeed),
-  // No VIDEO_TITLE: the app names the activity types the month contains
+  // No VIDEO_TITLE: the app falls back to its own default heading
   ...(process.env.VIDEO_TITLE ? { title: process.env.VIDEO_TITLE } : {}),
   subtitle: process.env.VIDEO_SUBTITLE || "Every square unlocked, one activity at a time.",
   kicker: process.env.VIDEO_KICKER || (monthDisplay || "Route Progress"),

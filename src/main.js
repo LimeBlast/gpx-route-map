@@ -161,20 +161,9 @@ function routesMonthLabel(routes) {
 function applyCardText() {
   const monthLabel = routesMonthLabel(state.routes);
 
-  elements.exportTitle.textContent = urlParams.get("title") || activityTitle();
+  elements.exportTitle.textContent = urlParams.get("title") || "My Month in Fitness";
   elements.exportSubtitle.textContent = urlParams.get("subtitle") || "Every square unlocked, one activity at a time.";
   elements.exportKicker.textContent = urlParams.get("kicker") || monthLabel || "Route Progress";
-}
-
-// Title card names only the activity types the month actually contains
-function activityTitle() {
-  const names = { run: "Running", ride: "Cycling", walk: "Walking" };
-  const present = Object.keys(names).filter((type) => state.routes.some((route) => route.type === type));
-
-  if (present.length === 0) return "Route Progress";
-
-  const labels = present.map((type) => names[type]);
-  return labels.length === 1 ? labels[0] : `${labels.slice(0, -1).join(", ")} & ${labels.at(-1)}`;
 }
 
 function exposeAppControls() {
