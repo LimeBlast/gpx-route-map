@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { createReadStream } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
@@ -46,8 +46,17 @@ const exportParams = new URLSearchParams({
 });
 const tileCacheDir = path.join(rootDir, ".tile-cache");
 const tileUserAgent = "gpx-route-map/1.0 (personal monthly activity reel; https://github.com/limeblast)";
+const tileFetchConcurrency = 4; // polite against OSM's usage policy
+const tileWarmMargin = 1; // one ring past the settled view covers Leaflet's edges
+const minWarmZoom = 2; // a transatlantic flight zooms out this far
+const gridCellDegrees = 0.02; // ~1km grid cell, plus slack for the camera padding
+const clusterJoinDegrees = 0.35; // routes within ~35km count as one area
+const overviewZoomCap = 12; // matches showFinalOverview
+const maxWarmZoom = 14; // matches the app's camera cap
 let tileCacheHits = 0;
 let tileCacheMisses = 0;
+let tilesPrewarmed = 0;
+const warmedTileKeys = new Set();
 const chromeDebugPort = Number(process.env.CHROME_DEBUG_PORT || 9223);
 const chromePath =
   process.env.CHROME_PATH ||
@@ -62,6 +71,7 @@ const outputPath = path.resolve(
   process.env.OUTPUT || path.join(rootDir, "exports", `monthly-${month || (await renderedMonth())}.mp4`)
 );
 await mkdir(path.dirname(outputPath), { recursive: true });
+await warmTileCache();
 
 const frameDir = await mkdtemp(path.join(tmpdir(), "route-progress-frames-"));
 const server = await startStaticServer(distDir);
@@ -233,7 +243,10 @@ try {
   ]);
 
   console.log(`Rendered ${frame} frames to ${outputPath}`);
-  console.log(`Tiles: ${tileCacheHits} from cache, ${tileCacheMisses} fetched from OpenStreetMap`);
+  console.log(
+    `Tiles: ${tileCacheHits} served from cache, ${tileCacheMisses} fetched during capture` +
+      ` (${tilesPrewarmed} pre-fetched before capture)`
+  );
 } finally {
   chrome.kill("SIGTERM");
   server.close();
@@ -308,6 +321,206 @@ function startStaticServer(directory) {
   });
 }
 
+// Pull every tile the reel will need before capture starts, so no frame ever
+// waits on the network and pacing is identical cold or warm.
+async function warmTileCache() {
+  const { routes } = JSON.parse(await readFile(path.join(rootDir, "public", "routes.json"), "utf8"));
+  const located = routes.filter((route) => route.coordinates?.length > 1);
+
+  if (located.length === 0) return;
+
+  const wanted = warmedTileKeys;
+
+  const add = (bounds, zoom) => {
+    for (const tile of tilesCovering(bounds, zoom)) {
+      wanted.add(`${tile.z}/${tile.x}/${tile.y}`);
+    }
+  };
+
+  for (const route of located) {
+    // The app frames the 1km grid cells a route touches, not the track itself
+    const bounds = padBounds(coordinateBounds(route.coordinates), gridCellDegrees);
+    const zoom = fitZoom(bounds);
+
+    // Only the settled view is warmed. Tiles that stream in mid-flight are
+    // transient and moving; warming every intermediate zoom multiplied the
+    // number of tiles pulled from OSM several times over for little gain.
+    add(bounds, zoom);
+  }
+
+  // flyToBounds between distant routes (UK to Canada) pulls the camera right
+  // out, so warm the whole-world view — cheap, only a handful of tiles
+  const routeBounds = located.map((route) => coordinateBounds(route.coordinates));
+  const allBounds = mergeBounds(routeBounds);
+
+  for (let z = minWarmZoom; z <= fitZoom(allBounds) + 2; z += 1) {
+    add(allBounds, z);
+  }
+
+  // The opening view and the closing overview frame a whole area of activity.
+  // Warming those per cluster avoids pulling a mid-zoom band across the ocean.
+  for (const cluster of clusterBounds(routeBounds)) {
+    const zoom = Math.min(fitZoom(cluster), overviewZoomCap);
+
+    // Down a few levels too: that band is what the camera flies through on its
+    // way into an area, and each step down costs a quarter of the tiles
+    for (let z = Math.max(zoom - 3, minWarmZoom); z <= zoom; z += 1) {
+      add(cluster, z);
+    }
+  }
+
+  const missing = [];
+  for (const key of wanted) {
+    const [z, x, y] = key.split("/");
+    try {
+      await stat(path.join(tileCacheDir, z, x, `${y}.png`));
+    } catch {
+      missing.push({ z, x, y });
+    }
+  }
+
+  if (missing.length === 0) {
+    console.log(`Tile cache warm: all ${wanted.size} tiles already on disk`);
+    return;
+  }
+
+  console.log(`Warming tile cache: ${missing.length} of ${wanted.size} tiles to fetch...`);
+  let done = 0;
+  const workers = Array.from({ length: tileFetchConcurrency }, async () => {
+    for (let tile = missing.pop(); tile; tile = missing.pop()) {
+      await fetchTile(tile.z, tile.x, tile.y).catch(() => {});
+      done += 1;
+
+      if (done % 100 === 0) console.log(`  ...${done} tiles`);
+    }
+  });
+
+  await Promise.all(workers);
+  tilesPrewarmed = done;
+  console.log(`Tile cache warm: ${done} tiles fetched, ${wanted.size} total`);
+}
+
+// Looped rather than Math.min(...coords) — a month of track points overflows
+// the call stack when spread
+function mergeBounds(list) {
+  return list.reduce((merged, bounds) => ({
+    west: Math.min(merged.west, bounds.west),
+    east: Math.max(merged.east, bounds.east),
+    south: Math.min(merged.south, bounds.south),
+    north: Math.max(merged.north, bounds.north)
+  }));
+}
+
+function boundsOverlap(left, right) {
+  return (
+    left.west <= right.east &&
+    right.west <= left.east &&
+    left.south <= right.north &&
+    right.south <= left.north
+  );
+}
+
+// Merge routes into areas of activity — a month in one city collapses to one
+// cluster, a month either side of an ocean stays two
+function clusterBounds(routeBounds) {
+  const clusters = [];
+
+  for (const bounds of routeBounds) {
+    const padded = padBounds(bounds, clusterJoinDegrees);
+    const overlapping = clusters.filter((cluster) => boundsOverlap(cluster, padded));
+
+    for (const cluster of overlapping) {
+      clusters.splice(clusters.indexOf(cluster), 1);
+    }
+
+    clusters.push(mergeBounds([padded, ...overlapping]));
+  }
+
+  return clusters;
+}
+
+function padBounds(bounds, degrees) {
+  return {
+    west: bounds.west - degrees,
+    east: bounds.east + degrees,
+    south: bounds.south - degrees,
+    north: bounds.north + degrees
+  };
+}
+
+function coordinateBounds(coordinates) {
+  const bounds = { west: Infinity, east: -Infinity, south: Infinity, north: -Infinity };
+
+  for (const [longitude, latitude] of coordinates) {
+    if (longitude < bounds.west) bounds.west = longitude;
+    if (longitude > bounds.east) bounds.east = longitude;
+    if (latitude < bounds.south) bounds.south = latitude;
+    if (latitude > bounds.north) bounds.north = latitude;
+  }
+
+  return bounds;
+}
+
+// Mirrors Leaflet's getBoundsZoom for the app's export padding, capped like
+// moveToBounds does
+function fitZoom(bounds) {
+  const availableWidth = width - 72;
+  const availableHeight = height - 330;
+
+  for (let zoom = maxWarmZoom; zoom > minWarmZoom; zoom -= 1) {
+    const worldSize = 256 * 2 ** zoom;
+    const spanX = (mercatorX(bounds.east) - mercatorX(bounds.west)) * worldSize;
+    const spanY = (mercatorY(bounds.south) - mercatorY(bounds.north)) * worldSize;
+
+    if (spanX <= availableWidth && spanY <= availableHeight) return zoom;
+  }
+
+  return minWarmZoom;
+}
+
+function tilesCovering(bounds, zoom) {
+  const scale = 2 ** zoom;
+  const left = Math.floor(mercatorX(bounds.west) * scale) - tileWarmMargin;
+  const right = Math.floor(mercatorX(bounds.east) * scale) + tileWarmMargin;
+  const top = Math.floor(mercatorY(bounds.north) * scale) - tileWarmMargin;
+  const bottom = Math.floor(mercatorY(bounds.south) * scale) + tileWarmMargin;
+  const tiles = [];
+
+  for (let x = Math.max(left, 0); x <= Math.min(right, scale - 1); x += 1) {
+    for (let y = Math.max(top, 0); y <= Math.min(bottom, scale - 1); y += 1) {
+      tiles.push({ z: zoom, x, y });
+    }
+  }
+
+  return tiles;
+}
+
+function mercatorX(longitude) {
+  return (longitude + 180) / 360;
+}
+
+function mercatorY(latitude) {
+  const radians = (latitude * Math.PI) / 180;
+  return (1 - Math.log(Math.tan(radians) + 1 / Math.cos(radians)) / Math.PI) / 2;
+}
+
+async function fetchTile(z, x, y) {
+  const upstream = await fetch(`https://tile.openstreetmap.org/${z}/${x}/${y}.png`, {
+    headers: { "User-Agent": tileUserAgent }
+  });
+
+  if (!upstream.ok) {
+    throw new Error(`tile ${z}/${x}/${y} responded ${upstream.status}`);
+  }
+
+  const body = Buffer.from(await upstream.arrayBuffer());
+  const cachePath = path.join(tileCacheDir, String(z), String(x), `${y}.png`);
+  await mkdir(path.dirname(cachePath), { recursive: true });
+  await writeFile(cachePath, body);
+
+  return body;
+}
+
 // OSM sends cache-control: no-cache, so Chrome re-requests every tile on every
 // render. Cache them ourselves instead: one fetch per tile, ever.
 async function serveTile(pathname, response) {
@@ -320,6 +533,7 @@ async function serveTile(pathname, response) {
   }
 
   const [, z, x, y] = match;
+
   const cachePath = path.join(tileCacheDir, z, x, `${y}.png`);
 
   try {
@@ -333,19 +547,7 @@ async function serveTile(pathname, response) {
   }
 
   try {
-    const upstream = await fetch(`https://tile.openstreetmap.org/${z}/${x}/${y}.png`, {
-      headers: { "User-Agent": tileUserAgent }
-    });
-
-    if (!upstream.ok) {
-      response.writeHead(upstream.status);
-      response.end();
-      return;
-    }
-
-    const body = Buffer.from(await upstream.arrayBuffer());
-    await mkdir(path.dirname(cachePath), { recursive: true });
-    await writeFile(cachePath, body);
+    const body = await fetchTile(z, x, y);
     tileCacheMisses += 1;
     response.writeHead(200, { "Content-Type": "image/png" });
     response.end(body);

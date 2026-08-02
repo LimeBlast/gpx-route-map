@@ -83,9 +83,10 @@ Maps use OpenStreetMap's standard tiles, greyed out with a CSS filter. Every ren
 `Map data © OpenStreetMap contributors` in the frame itself, positioned to stay clear of
 Instagram's caption block.
 
-Tiles are cached to `.tile-cache/` on first use and re-served locally after that, so repeat
-renders of the same month barely touch OSM's servers. The render prints a summary, e.g.
-`Tiles: 454 from cache, 145 fetched from OpenStreetMap`. Delete `.tile-cache/` to force a refresh.
+Every render first pulls the tiles it will need into `.tile-cache/`, then serves them locally,
+so no frame waits on the network and repeat renders of the same month touch OSM barely at all.
+A month of activity is a few hundred tiles. The render prints a summary, e.g.
+`Tiles: 3030 served from cache, 20 fetched during capture`. Delete `.tile-cache/` to force a refresh.
 
 ## How the Map Works
 

@@ -36,7 +36,8 @@ const minimumSwimDurationMs = 1600;
 const maximumSwimDurationMs = 3200;
 const swimFadeMs = 450;
 const devEndCardDelayMs = 2000; // mirrors the renderer's FINAL_HOLD_SECONDS
-const tileWaitTimeoutMs = 6000;
+const tileWaitTimeoutMs = 8000;
+const tileSettleGraceMs = 150; // let Leaflet request tiles for the new view first
 const maxPrefetchTiles = 48; // OSM's tile policy frowns on bulk downloading
 
 const state = {
@@ -468,24 +469,32 @@ function waitForCameraMove(callback) {
   state.timer = window.setTimeout(finish, panDurationSeconds * 1000 + 800);
 }
 
+// Leaflet only issues requests for a new view a beat after moveend, so the
+// "loading" flag is still false right after a pan — waiting on the load event
+// alone returned immediately and revealed routes onto a blank map. Poll the
+// layer's own tiles instead.
+function tilesSettled() {
+  const tiles = Object.values(tileLayer._tiles || {});
+  return tiles.length > 0 && tiles.every((tile) => tile.loaded);
+}
+
 function waitForTiles(callback) {
-  if (!state.tilesLoading) {
-    callback();
-    return;
-  }
+  const startedAt = performance.now();
 
-  let isDone = false;
-  const finish = () => {
-    if (isDone) return;
+  const poll = () => {
+    if (!state.isPlaying) return;
 
-    isDone = true;
-    tileLayer.off("load", finish);
-    window.clearTimeout(state.timer);
-    callback();
+    const settled = tilesSettled() && !state.tilesLoading;
+
+    if (settled || performance.now() - startedAt > tileWaitTimeoutMs) {
+      callback();
+      return;
+    }
+
+    state.timer = window.setTimeout(poll, 100);
   };
 
-  tileLayer.once("load", finish);
-  state.timer = window.setTimeout(finish, tileWaitTimeoutMs);
+  state.timer = window.setTimeout(poll, tileSettleGraceMs);
 }
 
 // Warm the browser cache for where the camera is heading next, so a jump
