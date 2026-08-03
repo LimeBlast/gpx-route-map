@@ -557,37 +557,17 @@ body.export-ended .export-end-card {
   line-height: 1;
 }
 
-/* Where the current activity sits in the period the reel covers. Day
-   granularity, so same-day activities hold position. */
-.timeline {
-  position: absolute;
-  left: 50%;
-  top: 232px;
-  z-index: 780;
-  width: calc(100% - 96px);
-  height: 8px;
-  background: rgba(8, 17, 31, 0.7);
-  border: 1px solid rgba(226, 232, 240, 0.18);
-  border-radius: 999px;
-  transform: translateX(-50%);
-  transition: opacity 350ms ease;
-}
-
-.timeline-fill {
-  width: 0;
-  height: 100%;
-  background: rgba(226, 232, 240, 0.55);
-  border-radius: 999px;
-  transition: width 600ms ease;
-}
-
-body:not(.export-started) .timeline,
-body.export-ended .timeline {
-  opacity: 0;
+/* How far through the reel's period the current activity is. Registered so
+   it can be transitioned; the tiles keep their own background, so only the
+   bar behind them fills. */
+@property --timeline {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 0%;
 }
 
 .export-stats {
-  transition: opacity 350ms ease;
+  transition: opacity 350ms ease, --timeline 600ms ease;
   position: absolute;
   left: 50%;
   top: 260px; /* ponytail: clears Instagram's top chrome on a 1920-tall reel */
@@ -598,12 +578,39 @@ body.export-ended .timeline {
   width: calc(100% - 96px);
   padding: 1.25rem;
   color: #e5edf8;
-  background: rgba(8, 17, 31, 0.86);
+  background: linear-gradient(
+    90deg,
+    rgba(56, 189, 248, 0.26) 0 calc(var(--timeline) - 16px),
+    rgba(8, 17, 31, 0.86) var(--timeline)
+  );
   border: 1px solid rgba(226, 232, 240, 0.22);
   border-radius: 1.5rem;
   box-shadow: 0 24px 80px rgba(15, 23, 42, 0.35);
   transform: translateX(-50%);
   backdrop-filter: blur(16px);
+}
+
+/* Names what the fill is measuring: the first and last day of the period */
+.export-stats::before,
+.export-stats::after {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  color: rgba(148, 163, 184, 0.75);
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-shadow: 0 2px 6px rgba(8, 17, 31, 0.9);
+}
+
+.export-stats::before {
+  left: 0.4rem;
+  content: var(--period-start, "");
+}
+
+.export-stats::after {
+  right: 0.4rem;
+  content: var(--period-end, "");
 }
 
 body:not(.export-started) .export-stats,

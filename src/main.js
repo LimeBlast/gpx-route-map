@@ -148,7 +148,7 @@ const elements = {
   exportSubtitle: document.querySelector("#export-subtitle"),
   exportTitle: document.querySelector("#export-title"),
   exportTotalDistance: document.querySelector("#export-total-distance"),
-  timelineFill: document.querySelector("#timeline-fill"),
+  exportStats: document.querySelector(".export-stats"),
   swimCard: document.querySelector("#swim-card"),
   swimMeter: document.querySelector("#swim-meter"),
   swimMeterFill: document.querySelector("#swim-meter-fill"),
@@ -192,6 +192,7 @@ async function boot() {
     applyCardText();
     elements.emptyState.hidden = state.routes.length > 0;
     setSwimMeter(0);
+    setPeriodEnds();
     buildGrid();
     render();
     fitAllRoutes();
@@ -615,8 +616,20 @@ function render() {
   updateExportEndCard();
 }
 
+// The days the fill runs between, printed under each end of the stats bar
+function setPeriodEnds() {
+  if (state.routes.length === 0) return;
+
+  const short = (value) =>
+    new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", timeZone: "UTC" }).format(value);
+  const [first, last] = periodBounds();
+
+  elements.exportStats.style.setProperty("--period-start", `"${short(first)}"`);
+  elements.exportStats.style.setProperty("--period-end", `"${short(last)}"`);
+}
+
 function setTimeline(route) {
-  elements.timelineFill.style.width = `${timelineFraction(route) * 100}%`;
+  elements.exportStats.style.setProperty("--timeline", `${timelineFraction(route) * 100}%`);
 }
 
 // Position of a route's day within the span the reel covers, so activities on
@@ -624,11 +637,27 @@ function setTimeline(route) {
 function timelineFraction(route) {
   if (!route || state.routes.length === 0) return 0;
 
-  const day = (candidate) => Date.parse(`${candidate.date.slice(0, 10)}T00:00:00Z`);
-  const first = day(state.routes[0]);
-  const last = day(state.routes.at(-1));
+  const [first, last] = periodBounds();
+  const day = utcDay(route.date);
 
-  return last > first ? (day(route) - first) / (last - first) : 1;
+  return last > first ? (day - first) / (last - first) : 1;
+}
+
+function utcDay(value) {
+  return Date.parse(`${value.slice(0, 10)}T00:00:00Z`);
+}
+
+// A single month runs the whole calendar month, so a quiet first or last week
+// still shows as time passing. An unfiltered render has no month to run to, so
+// it spans the activities themselves.
+function periodBounds() {
+  const first = state.routes[0].date;
+  const last = state.routes.at(-1).date;
+
+  if (!spansOneMonth(state.routes)) return [utcDay(first), utcDay(last)];
+
+  const [year, month] = first.slice(0, 7).split("-").map(Number);
+  return [Date.UTC(year, month - 1, 1), Date.UTC(year, month, 0)];
 }
 
 function updateExportEndCard() {
