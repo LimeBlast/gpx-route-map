@@ -86,7 +86,13 @@ const map = new MapLibreMap({
 // One basemap extract per area of activity, each contributing its own copy of
 // the theme's layers. Tiles outside an extract simply draw nothing.
 async function basemapStyle() {
-  const manifest = await (await fetch("/basemap/basemap.json")).json();
+  const response = await fetch("/basemap/basemap.json");
+
+  if (!response.ok) {
+    throw new Error("No basemap found — run: npm run build:routes && npm run build:basemap");
+  }
+
+  const manifest = await response.json();
   const sources = {};
   const layers = [];
 
@@ -178,11 +184,10 @@ async function boot() {
       0
     );
 
-    window.__bootStage = "waiting for map";
     await waitForMapReady();
-    window.__bootStage = "map ready";
     addOverlayLayers();
     bindMapEvents();
+    const monthLabel = routesMonthLabel(state.routes);
     applyCardText();
     elements.emptyState.hidden = state.routes.length > 0;
     setSwimMeter(0);
@@ -195,6 +200,8 @@ async function boot() {
     // the renderer drives play() itself and captures a clean frame
     if (import.meta.env.DEV) {
       document.body.classList.add("dev-chrome");
+      const caption = document.querySelector("#ig-caption");
+      if (caption && monthLabel) caption.textContent = `${monthLabel} in running, cycling, walking and swimming`;
       window.setTimeout(play, 150);
     }
   } catch (error) {

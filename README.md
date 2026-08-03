@@ -1,20 +1,26 @@
 # Monthly Activity Reel
 
-A tool for producing monthly Instagram Reel videos of running and cycling activities. It converts GPX and FIT files into an animated route-progress map, then renders a portrait `.mp4` ready to post.
+A tool for producing monthly Instagram Reel videos of running, cycling, walking and swimming. It converts GPX and FIT files into an animated route-progress map, then renders a portrait `.mp4` ready to post.
 
 ## Quick Start
 
 ```sh
 npm install
+brew install pmtiles     # once, for building the basemap
 ```
 
-Add last month's GPX/FIT files to `gpx/`, then:
+`ffmpeg` and Google Chrome are also required for rendering.
+
+Add last month's GPX/FIT files to `gpx/`, then build the basemap for the areas you have been
+active in (see [The Basemap](#the-basemap)) and render:
 
 ```sh
+npm run build:routes
+npm run build:basemap    # first run only, or when you move to a new area
 npm run render:monthly
 ```
 
-The video is written to `exports/monthly-YYYY-MM.mp4` with a title card reading e.g. "May 2026 · Running & Cycling".
+The video is written to `exports/monthly-YYYY-MM.mp4`, roughly 90 seconds long, with a title card reading "My Month in Fitness" above the month name.
 
 ## Add Your Activity Files
 
@@ -51,11 +57,11 @@ MONTH=2025-04 npm run render:instagram
 | Variable | Default | Effect |
 |---|---|---|
 | `EXPORT_SPEED` | `2000` | Animation pace — higher is slower |
-| `FPS` | `30` | Output frame rate |
+| `FPS` | `30` | Output frame rate. Capture rate is measured separately — frames are encoded at the speed they were actually captured, so the video runs in real time |
 | `FINAL_HOLD_SECONDS` | `2` | How long to hold on the final map before the stats card |
 | `END_HOLD_SECONDS` | `1.5` | How long to hold on the stats card |
 | `OUTPUT` | `exports/monthly-YYYY-MM-<label>.mp4` | Output file path — the month comes from `MONTH`, or from the first activity in the built `routes.json` |
-| `RENDER_LABEL` | `protomaps` | Suffix on the output filename, so different basemaps can be rendered side by side. Set to an empty string for no suffix |
+| `RENDER_LABEL` | none | Suffix on the output filename, e.g. `RENDER_LABEL=draft` gives `monthly-2026-07-draft.mp4` |
 | `VIDEO_TITLE` | `My Month in Fitness` | Title card heading |
 | `VIDEO_SUBTITLE` | `Every square unlocked, one activity at a time.` | Title card subheading |
 | `VIDEO_KICKER` | Month name | Title card eyebrow label |
@@ -78,16 +84,29 @@ npm run render:draft    # 15fps quick preview, saves to exports/draft-route-map.
 CHROME_PATH="/path/to/chrome" npm run render:monthly
 ```
 
-## Map Tiles and Attribution
+## The Basemap
 
-Maps use OpenStreetMap's standard tiles, greyed out with a CSS filter. Every render credits
-`Map data © OpenStreetMap contributors` in the frame itself, positioned to stay clear of
-Instagram's caption block.
+Maps are [Protomaps](https://protomaps.com/) vector tiles rendered by MapLibre, using the
+`grayscale` theme. The tiles live in local `.pmtiles` archives under `basemap/`, so a render
+makes no network requests at all and the map looks identical every time.
 
-Every render first pulls the tiles it will need into `.tile-cache/`, then serves them locally,
-so no frame waits on the network and repeat renders of the same month touch OSM barely at all.
-A month of activity is a few hundred tiles. The render prints a summary, e.g.
-`Tiles: 3030 served from cache, 20 fetched during capture`. Delete `.tile-cache/` to force a refresh.
+Building the basemap needs the pmtiles CLI once:
+
+```sh
+brew install pmtiles
+npm run build:routes      # so the fetcher knows where you have been
+npm run build:basemap     # extracts + label glyphs into basemap/
+```
+
+`build:basemap` groups your routes into areas of activity and pulls one extract per area
+straight out of the Protomaps planet build over HTTP range requests — a 137GB file is never
+downloaded. It also fetches a coarse whole-world layer so zoomed-out views and the flights
+between areas show real land. A month spanning the UK and Canada came to about 200MB.
+
+Re-run it when you start rendering activities from a new area. `basemap/` is gitignored.
+
+Every render credits `Map data © OpenStreetMap contributors` in the frame itself — Protomaps
+basemaps are built from OpenStreetMap data.
 
 ## How the Map Works
 

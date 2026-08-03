@@ -8,13 +8,13 @@
     "build": "npm run build:routes && npm run build:app",
     "build:app": "vite build",
     "build:routes": "node scripts/build-routes.mjs",
+    "build:basemap": "node scripts/fetch-basemap.mjs",
     "render:instagram": "node scripts/render-instagram.mjs",
     "render:monthly": "MONTHLY=1 node scripts/render-instagram.mjs",
     "render:draft": "FPS=15 OUTPUT=exports/draft-route-map.mp4 npm run render:instagram"
   },
   "dependencies": {
     "@xmldom/xmldom": "^0.8.10",
-    "leaflet": "^1.9.4",
     "maplibre-gl": "^6.1.0",
     "pmtiles": "^4.4.1",
     "protomaps-themes-base": "^4.5.0",

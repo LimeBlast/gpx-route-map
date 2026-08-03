@@ -4,10 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Purpose
 
-This tool produces monthly Instagram Reel videos of running and cycling activities. The primary workflow is:
+This tool produces monthly Instagram Reel videos of running, cycling, walking and swimming activities. The primary workflow is:
 
 1. Drop last month's GPX/FIT files into `gpx/`
 2. Run `npm run render:monthly` → writes `exports/monthly-YYYY-MM.mp4`
+
+The basemap must exist first: `npm run build:routes && npm run build:basemap` (needs `brew install pmtiles`). Only needed again when activities appear in a new area.
 
 ## Commands
 
@@ -15,6 +17,7 @@ This tool produces monthly Instagram Reel videos of running and cycling activiti
 npm run render:monthly          # primary command — renders last month's reel
 npm run dev                     # browser preview at localhost
 npm run build:routes            # parse gpx/ → public/routes.json only
+npm run build:basemap           # pull .pmtiles extracts for those routes → basemap/
 npm run build:app               # vite build only (no route parsing)
 npm run build                   # build:routes + build:app
 
@@ -53,7 +56,7 @@ Pure Node.js. Reads all `.fit` and `.gpx` files from `gpx/`, classifies each as 
 
 Single-file vanilla JS app (no framework). Boots by fetching `routes.json`, then:
 
-- Builds a 1km grid of `L.rectangle` cells over all route coordinates using Leaflet's Mercator projection
+- Builds a 1km grid over all route coordinates in spherical Mercator metres (`projectMeters`), drawn as a single GeoJSON source restyled per frame
 - Plays back routes one by one in `tick()` → `revealRoute()` loop driven by `setTimeout`
 - On each reveal: pans camera (`focusPlaybackView`), waits for pan (`waitForCameraMove`), reveals grid cells, draws animated route trace via `requestAnimationFrame`
 - Camera moves scale with distance (`moveToBounds`): under 60km is a quick 0.6s fit, a regional hop flies for 1.9s on a wider arc, and anything over 1000km flies for 3.6s with a forced apex at zoom 3.4 so an ocean crossing reads as one
@@ -61,7 +64,7 @@ Single-file vanilla JS app (no framework). Boots by fetching `routes.json`, then
 - Exposes `window.routeProgressApp` with `play()`, `pause()`, `reset()`, `showEndCard()`, `state()` for the render script to drive
 
 Key timing constants (all in ms, all in `main.js` top-level scope):
-- `panDurationSeconds` — Leaflet flyToBounds duration
+- `panDurationSeconds` — short-hop camera duration; longer hops use `regionalPanMs` / `longHaulPanMs`
 - `minimumTraceDurationMs` / `maximumTraceDurationMs` — route trace draw bounds
 - `postTraceHoldMs` — hold after trace before next route
 - `preRevealAfterPanMs` — pause between camera settling and route appearing
@@ -73,21 +76,9 @@ The basemap is Protomaps vector tiles read from local `.pmtiles` archives (`base
 
 Only visited grid cells are drawn; an unvisited grid showing through gave away where the routes were heading.
 
-### Historic note: OpenStreetMap rasters
+### Attribution
 
-OpenStreetMap standard raster tiles, greyed with a CSS filter (`.greyscale-tiles`), not a grey tileset. Leaflet's attribution control is hidden in the reel, so `.map-attribution` prints the credit into the frame instead — it sits above where Instagram's caption block lands.
-
-OSM serves tiles with `cache-control: no-cache`, so the render script proxies them through its own static server (`/tiles/{z}/{x}/{y}.png`) backed by a disk cache in `.tile-cache/`, passed to the app via the `tiles` URL param. One fetch per tile ever, with an identifying User-Agent per OSM's usage policy; the render logs cache hits vs fetches. The dev preview hits OSM directly.
-
-The app also prefetches the next route's tiles during the current one (`prefetchRouteTiles`, capped at 48 tiles) and waits for tiles to finish loading after a camera move before revealing a route (`waitForTiles`), which matters most on long jumps like UK → Canada.
-
-### scripts/render-instagram.mjs
-
-Node.js script. Builds the app, starts a local static server for `dist/`, launches headless Chrome via spawn, connects via CDP WebSocket (`createCdpClient`), navigates to the export URL, calls `routeProgressApp.play()`, then captures frames using `Page.startScreencast` (JPEG, ~24fps). 
-
-The encoder uses the rate frames were *actually* captured at, not `FPS`: Chrome emits screencast frames as fast as it repaints (~74fps here), so encoding them at a fixed 30fps stretched the reel into slow motion — a 77-second animation became a 4-minute video. `FPS` is now the output rate only.
-
-Frame capture loop: receives `Page.screencastFrame` events, writes `.jpg` files, sends `Page.screencastFrameAck` for backpressure. Once `routeProgressApp.state()` reports `isComplete && !isPlaying`, switches to Node.js timers (not frame counts) for the hold and end card — Chrome stops sending screencast frames when the page is visually static, so timers are required here. After capture, encodes frames to H.264 mp4 with ffmpeg at `fps` input framerate.
+MapLibre's attribution control is hidden in the reel, so `.map-attribution` prints `Map data © OpenStreetMap contributors` into the frame itself, positioned above where Instagram's caption block lands. Protomaps basemaps are built from OpenStreetMap data, so the credit is required.
 
 ### Activity type detection
 

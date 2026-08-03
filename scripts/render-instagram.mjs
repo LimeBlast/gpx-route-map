@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
@@ -61,9 +61,9 @@ await run("npm", ["run", "build:app"]);
 
 // Without MONTH the filename comes from the data itself, so an unfiltered
 // render of one month's files still lands on monthly-YYYY-MM.mp4.
-// RENDER_LABEL suffixes the name so alternative basemaps can be rendered
-// side by side without overwriting each other.
-const renderLabel = process.env.RENDER_LABEL ?? "protomaps";
+// RENDER_LABEL suffixes the name, for rendering variants side by side without
+// overwriting each other.
+const renderLabel = process.env.RENDER_LABEL ?? "";
 const outputPath = path.resolve(
   process.env.OUTPUT ||
     path.join(
