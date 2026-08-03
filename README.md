@@ -17,7 +17,7 @@ active in (see [The Basemap](#the-basemap)) and render:
 ```sh
 npm run build:routes
 npm run build:basemap    # first run only, or when you move to a new area
-npm run render:monthly
+npm run render:last-month
 ```
 
 The video is written to `exports/monthly-YYYY-MM.mp4`, roughly 90 seconds long, with a title card reading "My Month in Fitness" above the month name.
@@ -35,13 +35,13 @@ The build script writes `public/routes.json`, sorted by each route's first track
 ## Rendering a Monthly Reel
 
 ```sh
-npm run render:monthly
+npm run render:last-month
 ```
 
 This automatically targets the previous calendar month, so run it any time in the first few days of a new month. To target a specific month instead:
 
 ```sh
-MONTH=2025-04 npm run render:instagram
+MONTH=2025-04 npm run render:last-month
 ```
 
 ### What the video contains
@@ -60,7 +60,7 @@ MONTH=2025-04 npm run render:instagram
 | `FPS` | `30` | Output frame rate. Capture rate is measured separately — frames are encoded at the speed they were actually captured, so the video runs in real time |
 | `FINAL_HOLD_SECONDS` | `2` | How long to hold on the final map before the stats card |
 | `END_HOLD_SECONDS` | `1.5` | How long to hold on the stats card |
-| `OUTPUT` | `exports/monthly-YYYY-MM-<label>.mp4` | Output file path — the month comes from `MONTH`, or from the first activity in the built `routes.json` |
+| `OUTPUT` | `exports/monthly-YYYY-MM-<label>.mp4` | Output file path — a month render is named for `MONTH`; an unfiltered `render:all` is named `all-YYYY-MM-DD-to-YYYY-MM-DD.mp4` for the dates it covers |
 | `RENDER_LABEL` | none | Suffix on the output filename, e.g. `RENDER_LABEL=draft` gives `monthly-2026-07-draft.mp4` |
 | `VIDEO_TITLE` | `My Month in Fitness` | Title card heading |
 | `VIDEO_SUBTITLE` | `Every square unlocked, one activity at a time.` | Title card subheading |
@@ -69,8 +69,22 @@ MONTH=2025-04 npm run render:instagram
 Example:
 
 ```sh
-EXPORT_SPEED=15000 FINAL_HOLD_SECONDS=3 END_HOLD_SECONDS=2 npm run render:monthly
+EXPORT_SPEED=15000 FINAL_HOLD_SECONDS=3 END_HOLD_SECONDS=2 npm run render:last-month
 ```
+
+### Every month at once
+
+```sh
+npm run render:each-month   # one exports/monthly-YYYY-MM.mp4 per month found in gpx/
+```
+
+Renders back to back, so a year of files takes roughly a year's worth of render time.
+
+### Basemap coverage
+
+Every render first checks the routes it is about to draw against the areas in `basemap/basemap.json`, and fetches any it is missing before a single frame is captured — a route outside the downloaded areas would otherwise render over blank land, and that is only visible once the video is finished.
+
+Fetching is incremental: areas already on disk are kept, so covering a new area never re-downloads the old ones. `FORCE_BASEMAP_REBUILD=1 npm run build:basemap` starts from scratch instead. This needs the pmtiles CLI (`brew install pmtiles`); without it the render stops and says so rather than producing an unusable video.
 
 ### Quick draft
 
@@ -81,7 +95,7 @@ npm run render:draft    # 15fps quick preview, saves to exports/draft-route-map.
 ### Custom Chrome path
 
 ```sh
-CHROME_PATH="/path/to/chrome" npm run render:monthly
+CHROME_PATH="/path/to/chrome" npm run render:last-month
 ```
 
 ## The Basemap
@@ -137,7 +151,7 @@ If an activity is misclassified, copy `activity-overrides.example.json` to `acti
 GPX and FIT files can reveal home, work, or other sensitive locations. To trim the start and end of every route before building:
 
 ```sh
-TRIM_METERS=300 npm run render:monthly
+TRIM_METERS=300 npm run render:last-month
 ```
 
 ## Browser Preview

@@ -9,9 +9,10 @@
     "build:app": "vite build",
     "build:routes": "node scripts/build-routes.mjs",
     "build:basemap": "node scripts/fetch-basemap.mjs",
-    "render:instagram": "node scripts/render-instagram.mjs",
-    "render:monthly": "MONTHLY=1 node scripts/render-instagram.mjs",
-    "render:draft": "FPS=15 OUTPUT=exports/draft-route-map.mp4 npm run render:instagram"
+    "render:all": "node scripts/render-instagram.mjs",
+    "render:last-month": "MONTHLY=1 node scripts/render-instagram.mjs",
+    "render:each-month": "node scripts/render-each-month.mjs",
+    "render:draft": "FPS=15 OUTPUT=exports/draft-route-map.mp4 npm run render:all"
   },
   "dependencies": {
     "@xmldom/xmldom": "^0.8.10",

@@ -187,7 +187,7 @@ async function boot() {
     await waitForMapReady();
     addOverlayLayers();
     bindMapEvents();
-    const monthLabel = routesMonthLabel(state.routes);
+    const monthLabel = routesPeriodLabel(state.routes);
     applyCardText();
     elements.emptyState.hidden = state.routes.length > 0;
     setSwimMeter(0);
@@ -280,17 +280,37 @@ function updatePreviewScale() {
   document.documentElement.style.setProperty("--reel-scale", String(scale));
 }
 
-function routesMonthLabel(routes) {
+// "August 2026" for a single month, "July 2025 to August 2026" for a render
+// spanning several — an all-months reel is not "my month" in anything
+function routesPeriodLabel(routes) {
   if (routes.length === 0) return null;
-  return new Date(routes[0].date).toLocaleString("en-GB", { month: "long", year: "numeric" });
+
+  const months = routes.map((route) => route.date.slice(0, 7)).sort();
+  const first = monthName(months[0]);
+  const last = monthName(months.at(-1));
+
+  return first === last ? first : `${first} to ${last}`;
+}
+
+function monthName(month) {
+  const [year, monthNumber] = month.split("-").map(Number);
+  return new Date(year, monthNumber - 1, 1).toLocaleString("en-GB", {
+    month: "long",
+    year: "numeric"
+  });
+}
+
+function spansOneMonth(routes) {
+  return new Set(routes.map((route) => route.date.slice(0, 7))).size <= 1;
 }
 
 function applyCardText() {
-  const monthLabel = routesMonthLabel(state.routes);
+  const periodLabel = routesPeriodLabel(state.routes);
 
-  elements.exportTitle.textContent = urlParams.get("title") || "My Month in Fitness";
+  elements.exportTitle.textContent =
+    urlParams.get("title") || (spansOneMonth(state.routes) ? "My Month in Fitness" : "My Fitness");
   elements.exportSubtitle.textContent = urlParams.get("subtitle") || "Every square unlocked, one activity at a time.";
-  elements.exportKicker.textContent = urlParams.get("kicker") || monthLabel || "Route Progress";
+  elements.exportKicker.textContent = urlParams.get("kicker") || periodLabel || "Route Progress";
 }
 
 function exposeAppControls() {
@@ -602,7 +622,7 @@ function updateExportEndCard() {
   const walkDistance = walks.reduce((sum, route) => sum + route.distanceKm, 0);
   const swimMetres = swims.reduce((sum, route) => sum + route.swim.meters, 0);
 
-  elements.exportEndTitle.textContent = urlParams.get("endTitle") || routesMonthLabel(state.routes) || "Progress unlocked";
+  elements.exportEndTitle.textContent = urlParams.get("endTitle") || routesPeriodLabel(state.routes) || "Progress unlocked";
   elements.exportEndActivities.textContent = String(routeSource.length);
   elements.exportEndSquares.textContent = String(completedCells.size);
   elements.exportEndRunDistance.textContent = `${runDistance.toFixed(1)} km`;

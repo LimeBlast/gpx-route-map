@@ -2,10 +2,10 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Render monthly reel",
+      "label": "Render last month's reel",
       "detail": "Renders last month's activities to exports/monthly-YYYY-MM-<label>.mp4 (default build task)",
       "type": "npm",
-      "script": "render:monthly",
+      "script": "render:last-month",
       "group": {
         "kind": "build",
         "isDefault": true
@@ -42,10 +42,17 @@
       "problemMatcher": []
     },
     {
-      "label": "Render ALL months (no month filter)",
-      "detail": "Renders every activity in gpx/ regardless of month \u2014 not the monthly reel",
+      "label": "Render every month separately",
+      "detail": "One monthly-YYYY-MM.mp4 per month found in gpx/ — long running",
       "type": "npm",
-      "script": "render:instagram",
+      "script": "render:each-month",
+      "problemMatcher": []
+    },
+    {
+      "label": "Render ALL months (no month filter)",
+      "detail": "Renders every activity in gpx/ to exports/all-YYYY-MM-DD-to-YYYY-MM-DD.mp4 \u2014 not the monthly reel",
+      "type": "npm",
+      "script": "render:all",
       "problemMatcher": []
     },
     {

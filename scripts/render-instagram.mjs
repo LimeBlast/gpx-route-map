@@ -41,8 +41,14 @@ const exportParams = new URLSearchParams({
   // No VIDEO_TITLE: the app falls back to its own default heading
   ...(process.env.VIDEO_TITLE ? { title: process.env.VIDEO_TITLE } : {}),
   subtitle: process.env.VIDEO_SUBTITLE || "Every square unlocked, one activity at a time.",
-  kicker: process.env.VIDEO_KICKER || (monthDisplay || "Route Progress"),
-  endTitle: process.env.VIDEO_END_TITLE || monthDisplay || "Progress unlocked",
+  // Without a month the app labels the cards from the data itself — a render
+  // spanning several months says "July 2025 to August 2026", not one month
+  ...(process.env.VIDEO_KICKER || monthDisplay
+    ? { kicker: process.env.VIDEO_KICKER || monthDisplay }
+    : {}),
+  ...(process.env.VIDEO_END_TITLE || monthDisplay
+    ? { endTitle: process.env.VIDEO_END_TITLE || monthDisplay }
+    : {}),
   titleMs: process.env.TITLE_MS || "2800"
 });
 const chromeDebugPort = Number(process.env.CHROME_DEBUG_PORT || 9223);
@@ -57,10 +63,11 @@ console.log(
 );
 
 await run("npm", ["run", "build:routes"], month ? { MONTH: month } : {});
+await ensureBasemapCoverage();
 await run("npm", ["run", "build:app"]);
 
-// Without MONTH the filename comes from the data itself, so an unfiltered
-// render of one month's files still lands on monthly-YYYY-MM.mp4.
+// A month render is named for its month; an unfiltered one is named for the
+// date range it actually covers, taken from the data itself.
 // RENDER_LABEL suffixes the name, for rendering variants side by side without
 // overwriting each other.
 const renderLabel = process.env.RENDER_LABEL ?? "";
@@ -69,7 +76,7 @@ const outputPath = path.resolve(
     path.join(
       rootDir,
       "exports",
-      `monthly-${month || (await renderedMonth())}${renderLabel ? `-${renderLabel}` : ""}.mp4`
+      `${month ? `monthly-${month}` : await renderedRangeName()}${renderLabel ? `-${renderLabel}` : ""}.mp4`
     )
 );
 await mkdir(path.dirname(outputPath), { recursive: true });
@@ -279,20 +286,96 @@ try {
   await rm(frameDir, { recursive: true, force: true });
 }
 
-// Falls back to the newest month present, not the oldest: an unfiltered
-// routes.json spanning several months should be named for the latest one
-async function renderedMonth() {
+// The world extract covers everything at z0-5, so a route outside every area
+// extract still renders — just as blurry empty land at the zoom the reel uses.
+// That is only visible once the video is watched, half an hour of rendering
+// later, so fetch what this run needs first, and refuse to render if it can't
+// be fetched. build:basemap keeps areas it already has, so this only ever adds.
+async function ensureBasemapCoverage() {
+  const missing = await uncoveredRoutes();
+
+  if (!missing) return;
+
+  console.log(
+    `\n${missing.length ? `${missing.length} route(s) outside the basemap` : "No basemap yet"} — ` +
+      "fetching the map areas this render needs...\n" +
+      missing
+        .slice(0, 10)
+        .map((route) => `    ${route.date.slice(0, 10)}  ${route.name}`)
+        .join("\n") +
+      (missing.length > 10 ? `\n    ...and ${missing.length - 10} more` : "")
+  );
+
+  try {
+    await run("npm", ["run", "build:basemap"]);
+  } catch (error) {
+    return refuseToRender(
+      `Could not fetch the missing basemap areas: ${error.message}`,
+      "  The pmtiles CLI does the extracting — install it with: brew install pmtiles\n" +
+        "  Then: npm run build:basemap"
+    );
+  }
+
+  const stillMissing = await uncoveredRoutes();
+
+  if (stillMissing) {
+    return refuseToRender(
+      "The basemap still does not cover every route after fetching.",
+      "  Try a full rebuild: FORCE_BASEMAP_REBUILD=1 npm run build:basemap"
+    );
+  }
+}
+
+// null when every route is covered; otherwise the routes that are not (an empty
+// array when there is no basemap at all)
+async function uncoveredRoutes() {
+  let extracts;
+
+  try {
+    ({ extracts } = JSON.parse(
+      await readFile(path.join(rootDir, "basemap", "basemap.json"), "utf8")
+    ));
+  } catch {
+    return [];
+  }
+
+  const areas = extracts.filter((extract) => extract.name !== "world.pmtiles");
+  const { routes } = JSON.parse(
+    await readFile(path.join(rootDir, "public", "routes.json"), "utf8")
+  );
+  const uncovered = routes.filter((route) =>
+    (route.coordinates || []).some(
+      ([lon, lat]) =>
+        !areas.some(
+          ({ bounds }) =>
+            lon >= bounds.west &&
+            lon <= bounds.east &&
+            lat >= bounds.south &&
+            lat <= bounds.north
+        )
+    )
+  );
+
+  return uncovered.length ? uncovered : null;
+}
+
+// Rendering a reel costs half an hour and hundreds of frames; a known-bad map
+// is never worth spending that on
+function refuseToRender(problem, fix) {
+  console.error(`\n✗ ${problem}\n\n${fix}\n`);
+  process.exit(1);
+}
+
+// all-YYYY-MM-DD-to-YYYY-MM-DD, spanning the first and last activity actually
+// rendered. Falls back to last month's name if routes.json can't be read.
+async function renderedRangeName() {
   try {
     const { routes } = JSON.parse(await readFile(path.join(rootDir, "public", "routes.json"), "utf8"));
-    const months = [...new Set(routes.map((route) => route.date.slice(0, 7)))].sort();
+    const dates = routes.map((route) => route.date.slice(0, 10)).sort();
 
-    if (months.length > 1) {
-      console.warn(`routes.json spans ${months.join(", ")} — naming the export for ${months.at(-1)}`);
-    }
-
-    return months.at(-1) || lastMonth();
+    return dates.length ? `all-${dates[0]}-to-${dates.at(-1)}` : `all-${lastMonth()}`;
   } catch {
-    return lastMonth();
+    return `all-${lastMonth()}`;
   }
 }
 
