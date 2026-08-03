@@ -3,7 +3,7 @@
   "tasks": [
     {
       "label": "Render monthly reel",
-      "detail": "Renders last month's activities to exports/monthly-YYYY-MM.mp4",
+      "detail": "Renders last month's activities to exports/monthly-YYYY-MM-<label>.mp4 (default build task)",
       "type": "npm",
       "script": "render:monthly",
       "group": {
@@ -42,8 +42,8 @@
       "problemMatcher": []
     },
     {
-      "label": "Render instagram (default)",
-      "detail": "Renders full export using current env vars, no month filter",
+      "label": "Render ALL months (no month filter)",
+      "detail": "Renders every activity in gpx/ regardless of month \u2014 not the monthly reel",
       "type": "npm",
       "script": "render:instagram",
       "problemMatcher": []
