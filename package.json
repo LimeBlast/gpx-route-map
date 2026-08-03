@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "MONTHLY=1 npm run build:routes && vite",
     "build": "npm run build:routes && npm run build:app",
     "build:app": "vite build",
     "build:routes": "node scripts/build-routes.mjs",

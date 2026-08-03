@@ -557,6 +557,35 @@ body.export-ended .export-end-card {
   line-height: 1;
 }
 
+/* Where the current activity sits in the period the reel covers. Day
+   granularity, so same-day activities hold position. */
+.timeline {
+  position: absolute;
+  left: 50%;
+  top: 232px;
+  z-index: 780;
+  width: calc(100% - 96px);
+  height: 8px;
+  background: rgba(8, 17, 31, 0.7);
+  border: 1px solid rgba(226, 232, 240, 0.18);
+  border-radius: 999px;
+  transform: translateX(-50%);
+  transition: opacity 350ms ease;
+}
+
+.timeline-fill {
+  width: 0;
+  height: 100%;
+  background: rgba(226, 232, 240, 0.55);
+  border-radius: 999px;
+  transition: width 600ms ease;
+}
+
+body:not(.export-started) .timeline,
+body.export-ended .timeline {
+  opacity: 0;
+}
+
 .export-stats {
   transition: opacity 350ms ease;
   position: absolute;

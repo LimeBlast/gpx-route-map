@@ -10,7 +10,15 @@ const overridesPath = path.join(rootDir, "activity-overrides.json");
 const geocodeCachePath = path.join(rootDir, ".geocode-cache.json");
 const trimMeters = Number(process.env.TRIM_METERS || 0);
 const maxLineGapMeters = Number(process.env.MAX_LINE_GAP_METERS || 2500);
-const monthFilter = process.env.MONTH || ""; // e.g. "2025-05" to include only that month
+// e.g. MONTH="2025-05" for that month, MONTHLY=1 for last month
+const monthFilter = process.env.MONTH || (process.env.MONTHLY === "1" ? lastMonth() : "");
+
+function lastMonth() {
+  const d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
 const supportedExtensions = new Set([".fit", ".gpx"]);
 const activityOverrides = await readActivityOverrides();
 const geocodeCache = await readGeocodeCache();

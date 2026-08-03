@@ -148,6 +148,7 @@ const elements = {
   exportSubtitle: document.querySelector("#export-subtitle"),
   exportTitle: document.querySelector("#export-title"),
   exportTotalDistance: document.querySelector("#export-total-distance"),
+  timelineFill: document.querySelector("#timeline-fill"),
   swimCard: document.querySelector("#swim-card"),
   swimMeter: document.querySelector("#swim-meter"),
   swimMeterFill: document.querySelector("#swim-meter-fill"),
@@ -322,6 +323,7 @@ function exposeAppControls() {
       pause();
       hideSwimCard();
       setSwimMeter(0);
+      setTimeline(null);
       state.index = -1;
       state.cameraTargetKey = "";
       render();
@@ -349,6 +351,7 @@ function play() {
 
   if (state.index >= state.routes.length - 1) {
     state.index = -1;
+    setTimeline(null);
     render();
     fitAllRoutes();
   }
@@ -383,6 +386,9 @@ function tick() {
   }
 
   const nextIndex = state.index + 1;
+
+  // Advance during the camera move, so the bar is settled before the trace draws
+  setTimeline(state.routes[nextIndex]);
 
   if (state.routes[nextIndex].type === "swim") {
     clearRouteLayers();
@@ -607,6 +613,22 @@ function render() {
   elements.exportCurrentDate.textContent = latestRoute ? formatDate(latestRoute.date) : "—";
   elements.exportLocation.textContent = latestRoute?.location || "—";
   updateExportEndCard();
+}
+
+function setTimeline(route) {
+  elements.timelineFill.style.width = `${timelineFraction(route) * 100}%`;
+}
+
+// Position of a route's day within the span the reel covers, so activities on
+// the same day hold still and a gap of days shows as a jump.
+function timelineFraction(route) {
+  if (!route || state.routes.length === 0) return 0;
+
+  const day = (candidate) => Date.parse(`${candidate.date.slice(0, 10)}T00:00:00Z`);
+  const first = day(state.routes[0]);
+  const last = day(state.routes.at(-1));
+
+  return last > first ? (day(route) - first) / (last - first) : 1;
 }
 
 function updateExportEndCard() {
