@@ -258,8 +258,12 @@ function swimSummary({ session, lengths }) {
   if (!session || session.total_distance == null) return null;
 
   const poolLengthMeters = round((session.pool_length || 0) / 100, 2);
+  // A kick length records no strokes but is still a length swum, so go by
+  // length_type where the watch writes it
   const activeLengths = lengths
-    .filter((length) => (length.total_strokes || 0) > 0)
+    .filter((length) =>
+      length.length_type == null ? (length.total_strokes || 0) > 0 : length.length_type === 1
+    )
     .map((length) => ({
       seconds: round((length.total_elapsed_time || 0) / 1000, 2),
       strokes: length.total_strokes
@@ -482,6 +486,7 @@ function fitFieldName(globalMessageNumber, fieldNumber) {
     return {
       3: "total_elapsed_time",
       5: "total_strokes",
+      12: "length_type", // 1 = a length actually swum, 0 = resting at the wall
       253: "timestamp"
     }[fieldNumber];
   }

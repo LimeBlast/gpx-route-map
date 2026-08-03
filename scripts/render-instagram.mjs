@@ -81,6 +81,10 @@ const outputPath = path.resolve(
 );
 await mkdir(path.dirname(outputPath), { recursive: true });
 
+// A render left running keeps its Chrome on the debug port, and the next one
+// silently drives that stale browser instead of its own — it looks like a hang
+await refuseIfDebugPortTaken();
+
 const frameDir = await mkdtemp(path.join(tmpdir(), "route-progress-frames-"));
 const server = await startStaticServer(distDir);
 const chrome = spawn(chromePath, [
@@ -102,6 +106,15 @@ const chrome = spawn(chromePath, [
   `--remote-debugging-port=${chromeDebugPort}`,
   "about:blank"
 ]);
+
+// Ctrl-C or a stopped task skips the finally below, and the orphaned Chrome
+// keeps the debug port — which is what makes the *next* render look hung
+for (const signal of ["SIGINT", "SIGTERM"]) {
+  process.once(signal, () => {
+    chrome.kill("SIGKILL");
+    process.exit(1);
+  });
+}
 
 try {
   const client = await connectToChrome();
@@ -439,6 +452,18 @@ function startStaticServer(directory) {
   });
 }
 
+
+async function refuseIfDebugPortTaken() {
+  const response = await fetch(`http://127.0.0.1:${chromeDebugPort}/json/version`).catch(() => null);
+
+  if (!response) return;
+
+  throw new Error(
+    `Something is already listening on the Chrome debug port ${chromeDebugPort} — ` +
+      "most likely a render that never finished. Quit it (pkill -f render-instagram), " +
+      "or set CHROME_DEBUG_PORT to a free port to run two at once."
+  );
+}
 
 async function connectToChrome() {
   const version = await retry(async () => {

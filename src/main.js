@@ -491,7 +491,10 @@ function revealSwim(route, done) {
   const lanes = Array.from(elements.swimLanes.children);
   const showFilled = (count) => {
     lanes.forEach((lane, index) => lane.classList.toggle("filled", index < count));
-    const metres = Math.round(count * swim.poolLengthMeters);
+    // Count toward the session's own distance. A watch sometimes logs fewer
+    // lengths than its total covers, and the card ending short of the meter
+    // under it — and of the end card — reads as a bug
+    const metres = Math.round((swim.meters * count) / swim.lengths.length);
     elements.swimMetres.textContent = String(metres);
     elements.swimLengths.textContent = String(count);
     setSwimMeter(metresBefore + metres);
