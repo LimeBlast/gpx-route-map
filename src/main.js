@@ -45,6 +45,7 @@ const speedMs = Number(urlParams.get("speed") || 5200);
 const minimumSwimDurationMs = 1100;
 const maximumSwimDurationMs = 1900;
 const swimFadeMs = 300;
+const maxEndCardLocations = 10;
 const devEndCardDelayMs = 2000; // mirrors the renderer's FINAL_HOLD_SECONDS
 const tileWaitTimeoutMs = 8000;
 const tileSettleGraceMs = 150; // let MapLibre start work for the new view first
@@ -133,6 +134,7 @@ const elements = {
   exportEndSwimDistance: document.querySelector("#export-end-swim-distance"),
   exportEndSwimCount: document.querySelector("#export-end-swim-count"),
   exportEndTiles: document.querySelectorAll("[data-activity-tile]"),
+  exportEndLocations: document.querySelector("#export-end-locations"),
   exportEndSquares: document.querySelector("#export-end-squares"),
   exportEndTitle: document.querySelector("#export-end-title"),
   exportKicker: document.querySelector("#export-kicker"),
@@ -611,6 +613,22 @@ function updateExportEndCard() {
   elements.exportEndTiles.forEach((tile) => {
     tile.hidden = counts[tile.dataset.activityTile] === 0;
   });
+
+  elements.exportEndLocations.textContent = visitedLocations(routeSource).join(" · ");
+}
+
+// Places visited, in the order they first appear, so the card reads as a
+// journey rather than an alphabetical list
+function visitedLocations(routes) {
+  const seen = [];
+
+  for (const route of routes) {
+    if (route.location && !seen.includes(route.location)) seen.push(route.location);
+  }
+
+  if (seen.length <= maxEndCardLocations) return seen;
+
+  return [...seen.slice(0, maxEndCardLocations), `+${seen.length - maxEndCardLocations} more`];
 }
 
 function updateVisibleSquareCounts(completedCells) {

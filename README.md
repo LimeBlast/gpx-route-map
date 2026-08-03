@@ -44,7 +44,7 @@ MONTH=2025-04 npm run render:instagram
 2. **Route playback** — the camera pans to each activity, then its squares fill in with a route trace
 3. **Swim cards** — pool swims have no GPS, so each one takes over the frame in date order, filling one bar per length. A water meter under the stats bar fills toward the month's total swim distance, with a swimmer crossing the screen as it goes
 4. **Final overview** — the camera flies to the densest activity area and holds
-5. **Stats card** — month name as heading, with activity count, squares filled, and separate running, cycling, walking and swimming totals
+5. **Stats card** — month name as heading, with activity count, squares filled, separate running, cycling, walking and swimming totals, and the places visited
 
 ### Tuning the render
 
