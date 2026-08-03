@@ -29,6 +29,8 @@ const minimumTraceDurationMs = 500;
 const maximumTraceDurationMs = 1400;
 const postTraceHoldMs = 250;
 const preRevealAfterPanMs = 100;
+const timelineMs = 600; // must match the --timeline transition in styles.css
+const dayMs = 24 * 60 * 60 * 1000;
 const panDurationSeconds = 0.6;
 // Hops between areas of activity are worth playing as a flight rather than a
 // rushed jump. Regional hops (Toronto to Niagara) get a longer arc; crossing an
@@ -61,6 +63,7 @@ const state = {
   isPlaying: false,
   routeAnimationFrame: null,
   routeAnimationToken: 0,
+  dateCountFrame: null,
   timer: null,
   routeHeadMarker: null,
   swimMetresTotal: 0,
@@ -389,13 +392,29 @@ function tick() {
   const nextIndex = state.index + 1;
 
   // Advance during the camera move, so the bar is settled before the trace draws
-  setTimeline(state.routes[nextIndex]);
+  const timelineMoved = setTimeline(state.routes[nextIndex]);
+
+  // The old place name is wrong the moment the camera leaves it, so drop it
+  // until render() names where we landed
+  elements.exportLocation.classList.toggle(
+    "in-transit",
+    (state.routes[nextIndex].location || "\u00a0") !== elements.exportLocation.textContent
+  );
 
   if (state.routes[nextIndex].type === "swim") {
     clearRouteLayers();
-    state.index = nextIndex;
-    render();
-    revealSwim(state.routes[nextIndex], tick);
+
+    // A swim has no camera move to hide the bar's advance behind, so wait it out
+    state.timer = window.setTimeout(
+      () => {
+        if (!state.isPlaying) return;
+
+        state.index = nextIndex;
+        render();
+        revealSwim(state.routes[nextIndex], tick);
+      },
+      timelineMoved ? timelineMs : 0
+    );
     return;
   }
 
@@ -540,6 +559,7 @@ function showFinalOverview() {
 function pause() {
   state.isPlaying = false;
   window.clearTimeout(state.timer);
+  window.cancelAnimationFrame(state.dateCountFrame);
 }
 
 function hideSwimCard() {
@@ -611,8 +631,12 @@ function render() {
 
   elements.exportRouteCount.textContent = String(completedCells.size);
   elements.exportTotalDistance.textContent = `${visibleDistance.toFixed(1)} km`;
-  elements.exportCurrentDate.textContent = latestRoute ? formatDate(latestRoute.date) : "—";
-  elements.exportLocation.textContent = latestRoute?.location || "—";
+  // Same UTC day the timeline counted to, so the count doesn't jump on arrival
+  elements.exportCurrentDate.textContent = latestRoute ? formatUtcDate(utcDay(latestRoute.date)) : "—";
+  // Blank rather than a placeholder before the first route, on swims, and at
+  // the end; a space keeps the tile from collapsing
+  elements.exportLocation.textContent = latestRoute?.location || "\u00a0";
+  elements.exportLocation.classList.remove("in-transit");
   updateExportEndCard();
 }
 
@@ -628,8 +652,15 @@ function setPeriodEnds() {
   elements.exportStats.style.setProperty("--period-end", `"${short(last)}"`);
 }
 
+// Returns whether the bar actually has ground to cover — same-day activities
+// leave it where it is, and nothing needs to wait for that
 function setTimeline(route) {
-  elements.exportStats.style.setProperty("--timeline", `${timelineFraction(route) * 100}%`);
+  const next = `${timelineFraction(route) * 100}%`;
+  const moved = elements.exportStats.style.getPropertyValue("--timeline") !== next;
+
+  elements.exportStats.style.setProperty("--timeline", next);
+  countDateTo(route);
+  return moved;
 }
 
 // Position of a route's day within the span the reel covers, so activities on
@@ -641,6 +672,30 @@ function timelineFraction(route) {
   const day = utcDay(route.date);
 
   return last > first ? (day - first) / (last - first) : 1;
+}
+
+// The date field runs through the days the bar travels over, so the two read
+// as one movement rather than a bar sliding under an unrelated date
+function countDateTo(route) {
+  const from = state.index >= 0 ? utcDay(state.routes[state.index].date) : periodBounds()[0];
+  const to = utcDay(route.date);
+
+  window.cancelAnimationFrame(state.dateCountFrame);
+
+  if (to === from) return;
+
+  const step = (startedAt, now) => {
+    const progress = Math.min((now - startedAt) / timelineMs, 1);
+    const day = Math.round((from + (to - from) * progress) / dayMs) * dayMs;
+
+    elements.exportCurrentDate.textContent = formatUtcDate(day);
+
+    if (progress < 1) {
+      state.dateCountFrame = window.requestAnimationFrame((next) => step(startedAt, next));
+    }
+  };
+
+  state.dateCountFrame = window.requestAnimationFrame((now) => step(now, now));
 }
 
 function utcDay(value) {
@@ -1267,6 +1322,16 @@ function formatDate(value) {
     year: "numeric",
     month: "short",
     day: "numeric"
+  }).format(new Date(value));
+}
+
+// Counted days are UTC midnights, so they must be read back in UTC
+function formatUtcDate(value) {
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC"
   }).format(new Date(value));
 }
 

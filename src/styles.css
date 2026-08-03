@@ -649,6 +649,11 @@ body.export-ended .swim-meter {
 
 .export-stats #export-location {
   font-size: 2rem;
+  transition: opacity 250ms ease;
+}
+
+.export-stats #export-location.in-transit {
+  opacity: 0;
 }
 
 /* Instagram chrome mockup — dev preview only, so you can see what the
