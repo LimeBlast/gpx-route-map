@@ -50,6 +50,12 @@ const chromePath =
   process.env.CHROME_PATH ||
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
+console.log(
+  month
+    ? `Month: ${monthDisplay} (${process.env.MONTH ? "MONTH" : "MONTHLY=1, i.e. last month"})`
+    : "Month: no filter — every activity in gpx/ will be included"
+);
+
 await run("npm", ["run", "build:routes"], month ? { MONTH: month } : {});
 await run("npm", ["run", "build:app"]);
 
@@ -273,10 +279,18 @@ try {
   await rm(frameDir, { recursive: true, force: true });
 }
 
+// Falls back to the newest month present, not the oldest: an unfiltered
+// routes.json spanning several months should be named for the latest one
 async function renderedMonth() {
   try {
     const { routes } = JSON.parse(await readFile(path.join(rootDir, "public", "routes.json"), "utf8"));
-    return routes[0].date.slice(0, 7);
+    const months = [...new Set(routes.map((route) => route.date.slice(0, 7)))].sort();
+
+    if (months.length > 1) {
+      console.warn(`routes.json spans ${months.join(", ")} — naming the export for ${months.at(-1)}`);
+    }
+
+    return months.at(-1) || lastMonth();
   } catch {
     return lastMonth();
   }
