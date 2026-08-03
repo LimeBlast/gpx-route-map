@@ -555,7 +555,8 @@ async function evaluate(client, expression) {
   });
 
   if (result.exceptionDetails) {
-    throw new Error(result.exceptionDetails.text);
+    // .text is just "Uncaught" — the stack is the only part worth reading
+    throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
   }
 
   return result.result.value;

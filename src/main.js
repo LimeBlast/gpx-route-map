@@ -195,7 +195,6 @@ async function boot() {
     applyCardText();
     elements.emptyState.hidden = state.routes.length > 0;
     setSwimMeter(0);
-    setPeriodEnds();
     buildGrid();
     render();
     fitAllRoutes();
@@ -640,20 +639,6 @@ function render() {
   updateExportEndCard();
 }
 
-// The days the fill runs between, printed under each end of the stats bar
-function setPeriodEnds() {
-  if (state.routes.length === 0) return;
-
-  const short = (value) =>
-    new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", timeZone: "UTC" }).format(value);
-  const [first, last] = periodBounds();
-
-  elements.exportStats.style.setProperty("--period-start", `"${short(first)}"`);
-  elements.exportStats.style.setProperty("--period-end", `"${short(last)}"`);
-}
-
-// Returns whether the bar actually has ground to cover — same-day activities
-// leave it where it is, and nothing needs to wait for that
 function setTimeline(route) {
   const next = `${timelineFraction(route) * 100}%`;
   const moved = elements.exportStats.style.getPropertyValue("--timeline") !== next;
@@ -677,10 +662,13 @@ function timelineFraction(route) {
 // The date field runs through the days the bar travels over, so the two read
 // as one movement rather than a bar sliding under an unrelated date
 function countDateTo(route) {
+  window.cancelAnimationFrame(state.dateCountFrame);
+
+  // reset() clears the field rather than counting anywhere
+  if (!route || state.routes.length === 0) return;
+
   const from = state.index >= 0 ? utcDay(state.routes[state.index].date) : periodBounds()[0];
   const to = utcDay(route.date);
-
-  window.cancelAnimationFrame(state.dateCountFrame);
 
   if (to === from) return;
 
