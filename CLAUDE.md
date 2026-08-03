@@ -56,6 +56,7 @@ Single-file vanilla JS app (no framework). Boots by fetching `routes.json`, then
 - Builds a 1km grid of `L.rectangle` cells over all route coordinates using Leaflet's Mercator projection
 - Plays back routes one by one in `tick()` → `revealRoute()` loop driven by `setTimeout`
 - On each reveal: pans camera (`focusPlaybackView`), waits for pan (`waitForCameraMove`), reveals grid cells, draws animated route trace via `requestAnimationFrame`
+- Camera moves scale with distance (`moveToBounds`): under 60km is a quick 0.6s fit, a regional hop flies for 1.9s on a wider arc, and anything over 1000km flies for 3.6s with a forced apex at zoom 3.4 so an ocean crossing reads as one
 - The page is always the 1080×1920 reel frame (scaled to fit smaller viewports); title/end cards are CSS overlays toggled by body classes (`export-started`, `export-ended`)
 - Exposes `window.routeProgressApp` with `play()`, `pause()`, `reset()`, `showEndCard()`, `state()` for the render script to drive
 

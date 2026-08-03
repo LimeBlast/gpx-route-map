@@ -30,6 +30,14 @@ const maximumTraceDurationMs = 1400;
 const postTraceHoldMs = 250;
 const preRevealAfterPanMs = 100;
 const panDurationSeconds = 0.6;
+// Hops between areas of activity are worth playing as a flight rather than a
+// rushed jump. Regional hops (Toronto to Niagara) get a longer arc; crossing an
+// ocean pulls right out so the distance reads.
+const regionalHopKm = 60;
+const longHaulKm = 1000;
+const regionalPanMs = 1900;
+const longHaulPanMs = 3600;
+const longHaulApexZoom = 3.4;
 const finalOverviewDelayMs = 900;
 const finalClusterRadiusCells = 14;
 const exportTitleDurationMs = Number(urlParams.get("titleMs") || 2000);
@@ -54,7 +62,8 @@ const state = {
   routeAnimationToken: 0,
   timer: null,
   routeHeadMarker: null,
-  swimMetresTotal: 0
+  swimMetresTotal: 0,
+  panDurationMs: panDurationSeconds * 1000
 };
 
 updatePreviewScale();
@@ -520,7 +529,7 @@ function waitForCameraMove(callback) {
   };
 
   map.once("moveend", finish);
-  state.timer = window.setTimeout(finish, panDurationSeconds * 1000 + 800);
+  state.timer = window.setTimeout(finish, (state.panDurationMs || panDurationSeconds * 1000) + 1200);
 }
 
 function cameraPadding(padding) {
@@ -641,14 +650,43 @@ function moveToBounds(bounds, options = {}) {
     return false;
   }
 
+  const hopKm = camera ? centreDistanceKm(map.getCenter(), camera.center) : 0;
+
+  if (camera && hopKm > regionalHopKm) {
+    const isLongHaul = hopKm > longHaulKm;
+    state.panDurationMs = isLongHaul ? longHaulPanMs : regionalPanMs;
+
+    map.flyTo({
+      center: camera.center,
+      zoom: Math.min(camera.zoom, maxZoom),
+      duration: state.panDurationMs,
+      // Forcing the apex only makes sense for the big crossings; shorter hops
+      // read better with flyTo's own arc
+      ...(isLongHaul ? { minZoom: longHaulApexZoom } : { curve: 1.7 }),
+      essential: true
+    });
+
+    return true;
+  }
+
+  state.panDurationMs = panDurationSeconds * 1000;
   map.fitBounds(lngLatBounds, {
     padding,
     maxZoom,
-    duration: panDurationSeconds * 1000,
+    duration: state.panDurationMs,
     essential: true
   });
 
   return true;
+}
+
+function centreDistanceKm(from, to) {
+  return (
+    haversineMeters(
+      { latitude: from.lat, longitude: from.lng },
+      { latitude: to.lat, longitude: to.lng }
+    ) / 1000
+  );
 }
 
 // Leaflet had bounds.pad(); this is the same idea — is the target well inside
