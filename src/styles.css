@@ -246,6 +246,33 @@ body.export-ended .export-end-card {
   border-radius: 1.4rem;
 }
 
+/* Activities and squares pair up; the activity types run one per row, so a
+   month without a swim doesn't leave a hole in the grid. Each type reads
+   across — sport, distance, count — rather than stacking three short lines
+   down the middle of a full-width box. */
+.export-end-grid div[data-activity-tile] {
+  grid-column: 1 / -1;
+  grid-template-columns: 1fr auto;
+  gap: 0.15rem 1.4rem;
+  padding: 0.85rem 1.5rem;
+  text-align: left;
+}
+
+.export-end-grid div[data-activity-tile] span {
+  grid-area: 1 / 1;
+  font-size: 1.75rem;
+}
+
+.export-end-grid div[data-activity-tile] em {
+  grid-area: 2 / 1;
+}
+
+.export-end-grid div[data-activity-tile] strong {
+  grid-area: 1 / 2 / span 2;
+  align-self: center;
+  justify-self: end;
+}
+
 /* .export-end-grid div sets display, which would otherwise beat [hidden] */
 .export-end-grid div[hidden] {
   display: none;
