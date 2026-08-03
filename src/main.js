@@ -658,7 +658,9 @@ function moveToBounds(bounds, options = {}) {
   state.cameraTargetKey = options.key || "";
   map.stop();
 
-  const padding = cameraPadding(options.padding || { top: 240, bottom: 420, left: 72, right: 72 });
+  // Clears the stats bar (ends ~371px) and the swim meter (~430px); without
+  // this a route could be drawn underneath them
+  const padding = cameraPadding(options.padding || { top: 470, bottom: 430, left: 72, right: 72 });
   const maxZoom = options.maxZoom || 14;
   const lngLatBounds = toLngLatBounds(bounds);
   const camera = map.cameraForBounds(lngLatBounds, { padding, maxZoom });
