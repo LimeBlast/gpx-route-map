@@ -21,6 +21,7 @@ const clusterJoinDegrees = Number(process.env.CLUSTER_JOIN_DEGREES || 0.35);
 const clusterPadDegrees = Number(process.env.CLUSTER_PAD_DEGREES || 0.25);
 const maxZoom = Number(process.env.BASEMAP_MAX_ZOOM || 14);
 const minZoom = Number(process.env.BASEMAP_MIN_ZOOM || 0);
+const worldMaxZoom = Number(process.env.BASEMAP_WORLD_MAX_ZOOM || 5);
 
 const { routes } = JSON.parse(await readFile(routesPath, "utf8"));
 const clusters = routeClusters(routes, clusterJoinDegrees).map((cluster) =>
@@ -45,6 +46,20 @@ await mkdir(basemapDir, { recursive: true });
 
 const extracts = [];
 
+// A coarse whole-world layer underneath, so zoomed-out views and the flights
+// between areas show real land rather than empty background
+const worldPath = path.join(basemapDir, "world.pmtiles");
+console.log(`\nExtracting world.pmtiles (z0-${worldMaxZoom})...`);
+await run("pmtiles", ["extract", source, worldPath, `--minzoom=0`, `--maxzoom=${worldMaxZoom}`]);
+const worldStat = await stat(worldPath);
+console.log(`  world.pmtiles: ${(worldStat.size / 1024 / 1024).toFixed(1)} MB`);
+extracts.push({
+  name: "world.pmtiles",
+  bounds: { west: -180, south: -85, east: 180, north: 85 },
+  maxZoom: worldMaxZoom,
+  bytes: worldStat.size
+});
+
 for (const [index, cluster] of clusters.entries()) {
   const name = `area-${index + 1}.pmtiles`;
   const outputPath = path.join(basemapDir, name);
@@ -62,14 +77,14 @@ for (const [index, cluster] of clusters.entries()) {
 
   const { size } = await stat(outputPath);
   console.log(`  ${name}: ${(size / 1024 / 1024).toFixed(1)} MB`);
-  extracts.push({ name, bounds: cluster, bytes: size });
+  extracts.push({ name, bounds: cluster, maxZoom, bytes: size });
 }
 
 await fetchGlyphs();
 
 await writeFile(
   manifestPath,
-  `${JSON.stringify({ build, maxZoom, extracts }, null, 2)}\n`
+  `${JSON.stringify({ build, extracts }, null, 2)}\n`
 );
 
 const totalBytes = extracts.reduce((sum, extract) => sum + extract.bytes, 0);

@@ -142,6 +142,7 @@ try {
   await evaluate(client, "window.routeProgressApp.play()");
   const heartbeat = setInterval(logProgress, progressIntervalMs);
 
+  const captureStartedAt = Date.now();
   await client.send("Page.startScreencast", { format: "jpeg", quality: 90, everyNthFrame: 1 });
 
   await new Promise((resolve, reject) => {
@@ -234,15 +235,26 @@ try {
   });
 
   clearInterval(heartbeat);
-  console.log(`Encoding ${frame} frames with ffmpeg...`);
+
+  // Chrome emits screencast frames as fast as it repaints, which is well above
+  // 30fps. Encoding those at a fixed 30fps stretched the reel into slow motion,
+  // so feed ffmpeg the rate they were actually captured at.
+  const captureSeconds = (Date.now() - captureStartedAt) / 1000;
+  const capturedFps = frame / captureSeconds;
+
+  console.log(
+    `Encoding ${frame} frames with ffmpeg (captured at ${capturedFps.toFixed(1)} fps over ${captureSeconds.toFixed(1)}s, output ${fps} fps)...`
+  );
   await run("ffmpeg", [
     "-y",
     "-framerate",
-    String(fps),
+    capturedFps.toFixed(4),
     "-i",
     path.join(frameDir, "frame-%06d.jpg"),
     "-vf",
     "format=yuv420p",
+    "-r",
+    String(fps),
     "-c:v",
     "libx264",
     "-preset",

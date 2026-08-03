@@ -68,6 +68,12 @@ Key timing constants (all in ms, all in `main.js` top-level scope):
 
 ### Map tiles
 
+The basemap is Protomaps vector tiles read from local `.pmtiles` archives (`basemap/`, gitignored), rendered by MapLibre with the `grayscale` theme. `node scripts/fetch-basemap.mjs` clusters the routes in `routes.json` and pulls one extract per area, plus a coarse z0-5 whole-world layer underneath so zoomed-out views and the flights between areas show real land. `minZoom: 2` keeps the map filling the 1080×1920 frame — below that the world is narrower than the video.
+
+Only visited grid cells are drawn; an unvisited grid showing through gave away where the routes were heading.
+
+### Historic note: OpenStreetMap rasters
+
 OpenStreetMap standard raster tiles, greyed with a CSS filter (`.greyscale-tiles`), not a grey tileset. Leaflet's attribution control is hidden in the reel, so `.map-attribution` prints the credit into the frame instead — it sits above where Instagram's caption block lands.
 
 OSM serves tiles with `cache-control: no-cache`, so the render script proxies them through its own static server (`/tiles/{z}/{x}/{y}.png`) backed by a disk cache in `.tile-cache/`, passed to the app via the `tiles` URL param. One fetch per tile ever, with an identifying User-Agent per OSM's usage policy; the render logs cache hits vs fetches. The dev preview hits OSM directly.
@@ -77,6 +83,8 @@ The app also prefetches the next route's tiles during the current one (`prefetch
 ### scripts/render-instagram.mjs
 
 Node.js script. Builds the app, starts a local static server for `dist/`, launches headless Chrome via spawn, connects via CDP WebSocket (`createCdpClient`), navigates to the export URL, calls `routeProgressApp.play()`, then captures frames using `Page.startScreencast` (JPEG, ~24fps). 
+
+The encoder uses the rate frames were *actually* captured at, not `FPS`: Chrome emits screencast frames as fast as it repaints (~74fps here), so encoding them at a fixed 30fps stretched the reel into slow motion — a 77-second animation became a 4-minute video. `FPS` is now the output rate only.
 
 Frame capture loop: receives `Page.screencastFrame` events, writes `.jpg` files, sends `Page.screencastFrameAck` for backpressure. Once `routeProgressApp.state()` reports `isComplete && !isPlaying`, switches to Node.js timers (not frame counts) for the hold and end card — Chrome stops sending screencast frames when the page is visually static, so timers are required here. After capture, encodes frames to H.264 mp4 with ffmpeg at `fps` input framerate.
 

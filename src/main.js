@@ -25,18 +25,18 @@ const traceColors = {
 };
 
 const gridCellMeters = 1000;
-const minimumTraceDurationMs = 800;
-const maximumTraceDurationMs = 2000;
-const postTraceHoldMs = 500;
-const preRevealAfterPanMs = 200;
-const panDurationSeconds = 1.0;
-const finalOverviewDelayMs = 1400;
+const minimumTraceDurationMs = 500;
+const maximumTraceDurationMs = 1400;
+const postTraceHoldMs = 250;
+const preRevealAfterPanMs = 100;
+const panDurationSeconds = 0.6;
+const finalOverviewDelayMs = 900;
 const finalClusterRadiusCells = 14;
-const exportTitleDurationMs = Number(urlParams.get("titleMs") || 2800);
+const exportTitleDurationMs = Number(urlParams.get("titleMs") || 2000);
 const speedMs = Number(urlParams.get("speed") || 5200);
-const minimumSwimDurationMs = 1600;
-const maximumSwimDurationMs = 3200;
-const swimFadeMs = 450;
+const minimumSwimDurationMs = 1100;
+const maximumSwimDurationMs = 1900;
+const swimFadeMs = 300;
 const devEndCardDelayMs = 2000; // mirrors the renderer's FINAL_HOLD_SECONDS
 const tileWaitTimeoutMs = 8000;
 const tileSettleGraceMs = 150; // let MapLibre start work for the new view first
@@ -64,6 +64,9 @@ const map = new MapLibreMap({
   style: await basemapStyle(),
   center: [-3, 54.5],
   zoom: 5,
+  // Below this the world is narrower than the frame and the map stops filling
+  // the video — 512px tiles put the whole world at 2048px at zoom 2
+  minZoom: 2,
   interactive: false,
   attributionControl: false,
   fadeDuration: 0, // labels must not cross-fade — every frame is captured
@@ -84,7 +87,7 @@ async function basemapStyle() {
       type: "vector",
       tiles: [`/basemap/tiles/${extract.name}/{z}/{x}/{y}.mvt`],
       minzoom: 0,
-      maxzoom: manifest.maxZoom ?? 14,
+      maxzoom: extract.maxZoom ?? 14,
       // Bounds keep MapLibre from asking each extract for tiles it cannot have
       bounds: [extract.bounds.west, extract.bounds.south, extract.bounds.east, extract.bounds.north],
       attribution: "© OpenStreetMap contributors"
@@ -353,7 +356,7 @@ function tick() {
 
   clearRouteLayers();
   const cameraMoved = focusPlaybackView(nextIndex);
-  const followUpDelayMs = traceDurationMs() + Math.max(speedMs * 0.2, postTraceHoldMs);
+  const followUpDelayMs = traceDurationMs() + Math.max(speedMs * 0.12, postTraceHoldMs);
 
   const revealRoute = () => {
     if (!state.isPlaying) return;
@@ -399,7 +402,7 @@ function swimMetresBefore(index) {
 }
 
 function swimDurationMs() {
-  return Math.min(Math.max(Math.round(speedMs * 0.9), minimumSwimDurationMs), maximumSwimDurationMs);
+  return Math.min(Math.max(Math.round(speedMs * 0.7), minimumSwimDurationMs), maximumSwimDurationMs);
 }
 
 function revealSwim(route, done) {
@@ -407,7 +410,7 @@ function revealSwim(route, done) {
   const metresBefore = swimMetresBefore(state.index);
   const token = state.routeAnimationToken;
   const durationMs = swimDurationMs();
-  const holdMs = Math.max(speedMs * 0.2, postTraceHoldMs);
+  const holdMs = Math.max(speedMs * 0.12, postTraceHoldMs);
   const totalSeconds = swim.lengths.reduce((sum, length) => sum + length.seconds, 0);
 
   elements.swimDate.textContent = formatDate(route.date);
@@ -783,7 +786,7 @@ function removeRouteHeadMarker() {
 }
 
 function traceDurationMs() {
-  return Math.min(Math.max(Math.round(speedMs * 0.72), minimumTraceDurationMs), maximumTraceDurationMs);
+  return Math.min(Math.max(Math.round(speedMs * 0.5), minimumTraceDurationMs), maximumTraceDurationMs);
 }
 
 function segmentDistanceMeters(segment) {
@@ -901,18 +904,19 @@ function renderGrid(completedCells) {
   state.gridSignature = signature;
   const features = [];
 
-  for (const [key, cell] of state.gridCells) {
-    const completedCell = completedCells.get(key);
-    const color = completedCell ? cellColor(completedCell) : "#94a3b8";
-    const intensity = completedCell ? cellIntensity(completedCell.visitCount) : 0.12;
+  // Only visited cells are drawn — an unvisited grid showing through gave away
+  // where the routes were going
+  for (const [key, completedCell] of completedCells) {
+    const cell = state.gridCells.get(key) || parseCellKey(key);
+    const intensity = cellIntensity(completedCell.visitCount);
 
     features.push({
       type: "Feature",
       properties: {
-        color,
+        color: cellColor(completedCell),
         fillOpacity: intensity,
-        lineOpacity: completedCell ? Math.min(intensity + 0.24, 0.95) : 0.35,
-        weight: completedCell?.visitCount > 1 ? 1.5 : 1.1
+        lineOpacity: Math.min(intensity + 0.24, 0.95),
+        weight: completedCell.visitCount > 1 ? 1.5 : 1.1
       },
       geometry: { type: "Polygon", coordinates: [cellRing(cell)] }
     });
