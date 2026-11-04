@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const gpxDir = path.join(rootDir, "gpx");
+const gpxDir = path.resolve(rootDir, process.env.GPX_DIR || "gpx");
 const outputPath = path.join(rootDir, "public", "routes.json");
 const overridesPath = path.join(rootDir, "activity-overrides.json");
 const geocodeCachePath = path.join(rootDir, ".geocode-cache.json");

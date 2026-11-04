@@ -7,6 +7,7 @@
     "dev": "MONTHLY=1 npm run build:routes && vite",
     "build": "npm run build:routes && npm run build:app",
     "build:app": "vite build",
+    "fetch:dreeve": "node --env-file-if-exists=.env scripts/fetch-from-dreeve.mjs",
     "build:routes": "node scripts/build-routes.mjs",
     "build:basemap": "node scripts/fetch-basemap.mjs",
     "render:all": "node scripts/render-instagram.mjs",

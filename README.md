@@ -11,16 +11,22 @@ brew install pmtiles     # once, for building the basemap
 
 `ffmpeg` and Google Chrome are also required for rendering.
 
-Add last month's GPX/FIT files to `gpx/`, then build the basemap for the areas you have been
-active in (see [The Basemap](#the-basemap)) and render:
+Early each month, run `scripts/monthly.sh`. It fetches last month's original FIT/GPX files from
+Dreeve into `gpx/`, renders, and copies the video to iCloud Drive (`Monthly Reels/`) to post from the phone.
 
 ```sh
-npm run build:routes
-npm run build:basemap    # first run only, or when you move to a new area
-npm run render:last-month
+./scripts/monthly.sh                 # last month
+MONTH=2026-04 ./scripts/monthly.sh   # a specific month
 ```
 
-The video is written to `exports/monthly-YYYY-MM.mp4`, roughly 90 seconds long, with a title card reading "My Month in Fitness" above the month name.
+The video is written to `exports/monthly-YYYY-MM.mp4`, roughly 90 seconds long, with a title card reading "My Month in Fitness" above the month name. `render:last-month` builds the basemap itself if an activity is outside it (see [The Basemap](#the-basemap)).
+
+## Fetching From Dreeve
+
+- **Key:** `DREEVE_API_KEY` in `.env` (gitignored, 0600). Dreeve has a single API key, shared with the delphi relay and Home Assistant, so don't revoke it; copy it from `/opt/dreeve/.env` on delphi.
+- **Fetch only:** `npm run fetch:dreeve` (`MONTH=YYYY-MM` optional; `GPX_DIR=` to write elsewhere). It takes Run/TrailRun, Ride/GravelRide/MountainBikeRide, Walk/Hike and Swim, and names files like `2026-10-03-083301-Run-<id>.fit` so `build-routes` classifies them. Files already there are skipped.
+
+`gpx/` holds HealthFit's files for January to September 2026 (from before Dreeve); later months come from Dreeve. Don't fetch a month that's already there from HealthFit, or every activity appears twice.
 
 ## Add Your Activity Files
 

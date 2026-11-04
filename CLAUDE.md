@@ -6,8 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This tool produces monthly Instagram Reel videos of running, cycling, walking and swimming activities. The primary workflow is:
 
-1. Drop last month's GPX/FIT files into `gpx/`
-2. Run `npm run render:last-month` → writes `exports/monthly-YYYY-MM.mp4`
+1. `scripts/monthly.sh` (run by hand early each month) fetches last month's files from Dreeve into `gpx/`
+2. then renders (`npm run render:last-month` → `exports/monthly-YYYY-MM.mp4`) and copies it to iCloud Drive `Monthly Reels/`
 
 The basemap must exist first: `npm run build:routes && npm run build:basemap` (needs `brew install pmtiles`). Only needed again when activities appear in a new area.
 
